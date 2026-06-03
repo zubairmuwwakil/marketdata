@@ -6,6 +6,7 @@ import com.zubairmuwwakil.marketdata.config.ExternalApiProperties;
 import com.zubairmuwwakil.marketdata.config.MarketDataProperties;
 import com.zubairmuwwakil.marketdata.resilience.SimpleCircuitBreaker;
 import com.zubairmuwwakil.marketdata.service.ingestion.ApiKeyStore;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -25,6 +26,7 @@ public class AlphaVantageClient {
     private final ApiKeyStore apiKeyStore;
     private final ExternalApiProperties externalApiProperties;
     private final SimpleCircuitBreaker circuitBreaker;
+    private final boolean demoMode;
 
     public enum KeyValidationStatus {
         VALID,
@@ -37,11 +39,13 @@ public class AlphaVantageClient {
     public AlphaVantageClient(MarketDataProperties props,
                               ObjectMapper objectMapper,
                               ApiKeyStore apiKeyStore,
-                              ExternalApiProperties externalApiProperties) {
+                              ExternalApiProperties externalApiProperties,
+                              Environment environment) {
         this.props = props;
         this.objectMapper = objectMapper;
         this.apiKeyStore = apiKeyStore;
         this.externalApiProperties = externalApiProperties;
+        this.demoMode = environment.matchesProfiles("demo");
 
         var av = props.alphavantage();
         if (av == null || av.baseUrl() == null || av.baseUrl().isBlank()) {
@@ -70,6 +74,9 @@ public class AlphaVantageClient {
     }
 
     public JsonNode timeSeriesDaily(String symbol) {
+        if (demoMode) {
+            throw new IllegalStateException("Demo profile uses seeded market data and does not call Alpha Vantage.");
+        }
         String key = apiKeyStore.get();
         if (key == null || key.isBlank()) {
             throw new IllegalStateException("ALPHAVANTAGE_API_KEY is missing/blank");
@@ -115,6 +122,12 @@ public class AlphaVantageClient {
      * This consumes one external request/quota on Alpha Vantage.
      */
     public KeyValidationResult validateKey(String key) {
+        if (demoMode) {
+            return new KeyValidationResult(
+                    KeyValidationStatus.VALID,
+                    "Demo mode is active. External provider validation was skipped."
+            );
+        }
         if (key == null || key.isBlank()) {
             return new KeyValidationResult(KeyValidationStatus.INVALID, "API key is blank");
         }

@@ -75,6 +75,7 @@
     </section>
   </main>
 
+  <script src="/js/demo-mode.js"></script>
   <script>
     const accessKeyBtn = document.getElementById('access-key-btn');
     const marketlensKeyInput = document.getElementById('marketlens-key');
@@ -90,8 +91,9 @@
     const newLabel = document.getElementById('new-label');
     const newLimit = document.getElementById('new-limit');
     const adminStatus = document.getElementById('admin-status');
+    let demoConfig = null;
 
-    let accessKey = localStorage.getItem('marketlens_api_key') || '';
+    let accessKey = window.marketLensDemo.getStoredApiKey();
     marketlensKeyInput.value = accessKey;
 
     const api = (path, opts = {}) => fetch(path, {
@@ -108,11 +110,9 @@
     };
 
     const promptKey = () => {
-      const next = prompt('Enter MarketLens API Key (default: change-me-user)', accessKey || '');
+      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
       if (next === null) return false;
-      accessKey = next.trim();
-      if (accessKey) localStorage.setItem('marketlens_api_key', accessKey);
-      else localStorage.removeItem('marketlens_api_key');
+      accessKey = window.marketLensDemo.saveApiKey(next);
       marketlensKeyInput.value = accessKey;
       return true;
     };
@@ -120,12 +120,10 @@
     accessKeyBtn.addEventListener('click', promptKey);
 
     saveMarketlens.addEventListener('click', () => {
-      accessKey = (marketlensKeyInput.value || '').trim();
+      accessKey = window.marketLensDemo.saveApiKey(marketlensKeyInput.value || '');
       if (accessKey) {
-        localStorage.setItem('marketlens_api_key', accessKey);
         setStatus('MarketLens API key saved.');
       } else {
-        localStorage.removeItem('marketlens_api_key');
         setStatus('MarketLens API key cleared.');
       }
     });
@@ -148,7 +146,7 @@
       }
     });
 
-    refreshQuota.addEventListener('click', async () => {
+    async function loadQuota() {
       if (!accessKey && !promptKey()) return;
       quotaEl.textContent = 'Loading quota...';
       try {
@@ -159,7 +157,9 @@
       } catch (err) {
         quotaEl.textContent = `Failed: ${err.message}`;
       }
-    });
+    }
+
+    refreshQuota.addEventListener('click', loadQuota);
 
     async function loadKeys() {
       if (!accessKey && !promptKey()) return;
@@ -239,7 +239,25 @@
       }
     });
 
-    loadKeys();
+    async function initDemo() {
+      demoConfig = await window.marketLensDemo.load();
+      accessKey = window.marketLensDemo.getStoredApiKey();
+      marketlensKeyInput.value = accessKey;
+      if (demoConfig) {
+        window.marketLensDemo.insertBanner(
+          document.querySelector('main'),
+          demoConfig,
+          'Demo mode auto-loads the admin key so the quota and key-management panels work without extra setup. The provider key is optional.'
+        );
+        providerKeyInput.placeholder = 'Optional in demo mode';
+        window.marketLensDemo.setValueIfEmpty(newRole, 'USER');
+        window.marketLensDemo.setValueIfEmpty(newLabel, 'interview-demo');
+      }
+      await loadQuota();
+      await loadKeys();
+    }
+
+    initDemo();
   </script>
 </body>
 </html>

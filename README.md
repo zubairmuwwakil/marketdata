@@ -44,6 +44,7 @@ Set the following environment variables (or update `src/main/resources/applicati
 - `SPRING_DATASOURCE_URL` (default: `jdbc:postgresql://localhost:5433/marketdata`)
 - `SPRING_DATASOURCE_USERNAME` (default: `marketdata`)
 - `SPRING_DATASOURCE_PASSWORD` (default: `marketdata`)
+- `DATABASE_URL` (optional Render-style connection string, e.g. `postgresql://user:password@host:5432/marketdata`)
 - `MARKETDATA_ADMIN_KEY` (admin API key)
 - `MARKETDATA_USER_KEY` (user API key)
 - `ALPHAVANTAGE_API_KEY` (provider key)
@@ -56,6 +57,25 @@ Set the following environment variables (or update `src/main/resources/applicati
 ```
 
 The app will start on `http://localhost:8080`.
+
+### Demo Mode
+
+For interview demos, you can boot MarketLens with seeded data and no external services:
+
+```bash
+./mvnw -Pdemo spring-boot:run
+```
+
+Demo mode uses an in-memory H2 database, skips Flyway/Postgres setup, bypasses Alpha Vantage validation, and preloads:
+
+- Active watchlist symbols: `MSFT`, `AAPL`, `NVDA`, `SPY`
+- One inactive symbol with an intentional data gap for quality demos: `TSLA`
+- Seeded RSI/MACD indicator history
+- Corporate actions, pipeline runs, quota usage, and a quarantine example
+
+Open `http://localhost:8080/` after startup. If browser storage is empty, the UI auto-loads the demo admin key so the full workspace, including admin pages, is immediately usable.
+
+Use `./mvnw verify` to run unit tests plus the deploy smoke test that packages the jar, boots it with a Render-style `DATABASE_URL`, runs Flyway migrations, and checks `/api/v1/health`.
 
 ## UX Pages
 

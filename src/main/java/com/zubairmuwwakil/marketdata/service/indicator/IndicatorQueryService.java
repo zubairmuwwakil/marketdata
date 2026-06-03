@@ -30,19 +30,30 @@ public class IndicatorQueryService {
                 .toList();
     }
 
-            public List<IndicatorDto> getAllForSymbol(String symbol, LocalDate after, int limit) {
-            var pageable = PageRequest.of(0, limit, Sort.by("tradeDate").ascending());
-            var start = after == null ? LocalDate.MIN : after;
-            return repo.findAllBySymbolAndTradeDateGreaterThanOrderByTradeDateAsc(symbol, start, pageable)
+    public List<IndicatorDto> getAllForSymbol(String symbol, LocalDate after, int limit) {
+        if (after == null) {
+            return repo.findAllBySymbolOrderByTradeDateAsc(symbol).stream()
+                    .limit(limit)
+                    .map(i -> new IndicatorDto(
+                            i.getSymbol(),
+                            i.getTradeDate(),
+                            i.getIndicatorType().name(),
+                            i.getValue()
+                    ))
+                    .toList();
+        }
+
+        var pageable = PageRequest.of(0, limit, Sort.by("tradeDate").ascending());
+        return repo.findAllBySymbolAndTradeDateGreaterThanOrderByTradeDateAsc(symbol, after, pageable)
                 .stream()
                 .map(i -> new IndicatorDto(
-                    i.getSymbol(),
-                    i.getTradeDate(),
-                    i.getIndicatorType().name(),
-                    i.getValue()
+                        i.getSymbol(),
+                        i.getTradeDate(),
+                        i.getIndicatorType().name(),
+                        i.getValue()
                 ))
                 .toList();
-            }
+    }
 
     public List<IndicatorDto> getByType(String symbol, IndicatorType type) {
         return repo.findAllBySymbolAndIndicatorTypeOrderByTradeDateAsc(symbol, type).stream()
@@ -56,9 +67,20 @@ public class IndicatorQueryService {
     }
 
     public List<IndicatorDto> getByType(String symbol, IndicatorType type, LocalDate after, int limit) {
+        if (after == null) {
+            return repo.findAllBySymbolAndIndicatorTypeOrderByTradeDateAsc(symbol, type).stream()
+                    .limit(limit)
+                    .map(i -> new IndicatorDto(
+                            i.getSymbol(),
+                            i.getTradeDate(),
+                            i.getIndicatorType().name(),
+                            i.getValue()
+                    ))
+                    .toList();
+        }
+
         var pageable = PageRequest.of(0, limit, Sort.by("tradeDate").ascending());
-        var start = after == null ? LocalDate.MIN : after;
-        return repo.findAllBySymbolAndIndicatorTypeAndTradeDateGreaterThanOrderByTradeDateAsc(symbol, type, start, pageable)
+        return repo.findAllBySymbolAndIndicatorTypeAndTradeDateGreaterThanOrderByTradeDateAsc(symbol, type, after, pageable)
                 .stream()
                 .map(i -> new IndicatorDto(
                         i.getSymbol(),

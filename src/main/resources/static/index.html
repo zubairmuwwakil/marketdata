@@ -515,6 +515,7 @@
     </section>
   </main>
 
+  <script src="/js/demo-mode.js"></script>
   <script>
     const ingestBtn = document.getElementById('ingest-btn');
     const ingestStatus = document.getElementById('ingest-status');
@@ -539,21 +540,17 @@
     const marketlensKeyInput = document.getElementById('marketlens-key');
     const saveMarketlensBtn = document.getElementById('save-marketlens-btn');
     const useDefaultMarketlensBtn = document.getElementById('use-default-marketlens-btn');
+    let demoConfig = null;
 
-    let accessKey = localStorage.getItem('marketlens_api_key') || '';
+    let accessKey = window.marketLensDemo.getStoredApiKey();
     if (marketlensKeyInput) {
       marketlensKeyInput.value = accessKey;
     }
 
     const promptForKey = () => {
-      const next = prompt('Enter MarketLens API Key (default: change-me-user)', accessKey || '');
+      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
       if (next === null) return false;
-      accessKey = next.trim();
-      if (accessKey) {
-        localStorage.setItem('marketlens_api_key', accessKey);
-      } else {
-        localStorage.removeItem('marketlens_api_key');
-      }
+      accessKey = window.marketLensDemo.saveApiKey(next);
       return true;
     };
 
@@ -619,9 +616,8 @@
     });
 
     saveMarketlensBtn.addEventListener('click', () => {
-      accessKey = (marketlensKeyInput.value || '').trim();
+      accessKey = window.marketLensDemo.saveApiKey(marketlensKeyInput.value || '');
       if (accessKey) {
-        localStorage.setItem('marketlens_api_key', accessKey);
         setStatus(keyStatus, 'MarketLens API key saved. Validating...');
         api('/api/v1/health').then(res => {
           if (res.ok) {
@@ -631,15 +627,13 @@
           }
         });
       } else {
-        localStorage.removeItem('marketlens_api_key');
         setStatus(keyStatus, 'MarketLens API key cleared.');
       }
     });
 
     useDefaultMarketlensBtn.addEventListener('click', () => {
-      accessKey = 'change-me-user';
+      accessKey = window.marketLensDemo.saveApiKey((demoConfig && demoConfig.defaultApiKey) || 'change-me-user');
       marketlensKeyInput.value = accessKey;
-      localStorage.setItem('marketlens_api_key', accessKey);
       setStatus(keyStatus, 'Default MarketLens API key applied.');
     });
 
@@ -869,6 +863,17 @@
 
     // Update status/quota on load
     (async function init() {
+      demoConfig = await window.marketLensDemo.load();
+      accessKey = window.marketLensDemo.getStoredApiKey();
+      marketlensKeyInput.value = accessKey;
+      if (demoConfig) {
+        window.marketLensDemo.insertBanner(
+          document.querySelector('main'),
+          demoConfig,
+          'Interview demo mode uses an in-memory dataset, a preloaded admin key, and seeded pipeline history so the full workspace works with one startup command.'
+        );
+        window.marketLensDemo.setValueIfEmpty(document.getElementById('symbol'), demoConfig.featuredSymbol);
+      }
       await updateStatus();
       await refreshQuota();
       await loadWatchlist();

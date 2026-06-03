@@ -36,6 +36,6 @@ public class TechnicalIndicator {
     @Column(name = "indicator_type", nullable = false, length = 32)
     private IndicatorType indicatorType;
 
-    @Column(nullable = false, precision = 18, scale = 8)
+    @Column(name = "\"value\"", nullable = false, precision = 18, scale = 8)
     private BigDecimal value;
 }

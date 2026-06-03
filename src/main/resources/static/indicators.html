@@ -188,6 +188,7 @@
     </div>
   </main>
 
+  <script src="/js/demo-mode.js"></script>
   <script>
     const symbolSelect = document.getElementById('symbol-select');
     const loadBtn = document.getElementById('load-btn');
@@ -197,8 +198,9 @@
     const macdCanvas = document.getElementById('macd-canvas');
     const tableWrap = document.getElementById('table-wrap');
     const accessKeyBtn = document.getElementById('access-key-btn');
+    let demoConfig = null;
 
-    let accessKey = localStorage.getItem('marketlens_api_key') || '';
+    let accessKey = window.marketLensDemo.getStoredApiKey();
     const api = (path, opts = {}) => fetch(path, {
       headers: {
         'Content-Type': 'application/json',
@@ -213,14 +215,9 @@
     };
 
     accessKeyBtn.addEventListener('click', () => {
-      const next = prompt('Enter MarketLens API Key (default: change-me-user)', accessKey || '');
+      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
       if (next === null) return;
-      accessKey = next.trim();
-      if (accessKey) {
-        localStorage.setItem('marketlens_api_key', accessKey);
-      } else {
-        localStorage.removeItem('marketlens_api_key');
-      }
+      accessKey = window.marketLensDemo.saveApiKey(next);
     });
 
     async function loadSymbols() {
@@ -230,6 +227,9 @@
         const data = await res.json();
         symbolSelect.innerHTML = '<option value="">-- Select symbol --</option>' +
           data.map(s => `<option value="${s.symbol}">${s.symbol} (${s.tradeDate})</option>`).join('');
+        if (demoConfig && data.some(row => row.symbol === demoConfig.featuredSymbol)) {
+          symbolSelect.value = demoConfig.featuredSymbol;
+        }
       } catch (e) {
         // ignore
       }
@@ -380,7 +380,24 @@
     }
 
     loadBtn.addEventListener('click', loadIndicators);
-    loadSymbols();
+
+    async function initDemo() {
+      demoConfig = await window.marketLensDemo.load();
+      accessKey = window.marketLensDemo.getStoredApiKey();
+      if (demoConfig) {
+        window.marketLensDemo.insertBanner(
+          document.querySelector('main'),
+          demoConfig,
+          'Indicators are already computed for the seeded symbols. The featured symbol is preselected for a quick walkthrough.'
+        );
+      }
+      await loadSymbols();
+      if (symbolSelect.value) {
+        await loadIndicators();
+      }
+    }
+
+    initDemo();
   </script>
 </body>
 </html>

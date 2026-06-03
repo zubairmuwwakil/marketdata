@@ -9,11 +9,9 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -21,11 +19,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final RateLimitProperties properties;
     private final QuotaService quotaService;
+    private final ApiProblemResponseWriter problemResponseWriter;
     private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
 
-    public RateLimitFilter(RateLimitProperties properties, QuotaService quotaService) {
+    public RateLimitFilter(RateLimitProperties properties,
+                           QuotaService quotaService,
+                           ApiProblemResponseWriter problemResponseWriter) {
         this.properties = properties;
         this.quotaService = quotaService;
+        this.problemResponseWriter = problemResponseWriter;
     }
 
     @Override
@@ -56,9 +58,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         long retryAfter = Math.max(1, probe.getNanosToWaitForRefill() / 1_000_000_000L);
         response.setStatus(429);
         response.setHeader("Retry-After", String.valueOf(retryAfter));
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write("{\"title\":\"Too Many Requests\",\"status\":429,\"detail\":\"Rate limit exceeded. Retry after " + retryAfter + " seconds.\"}");
+        problemResponseWriter.writeRateLimitExceeded(response, retryAfter);
     }
 
     private Bucket newBucket() {

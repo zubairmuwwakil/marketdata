@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.zubairmuwwakil.marketdata.client.AlphaVantageClient;
 import com.zubairmuwwakil.marketdata.model.dto.DailyCandle;
 import com.zubairmuwwakil.marketdata.repository.IngestionQuarantineRepository;
-import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -12,7 +12,7 @@ import java.time.LocalDate;
 import java.util.*;
 
 @Service
-@Primary // ensures this is the MarketDataProvider Spring injects
+@Profile("!demo")
 public class AlphaVantageDailyProvider implements MarketDataProvider {
 
     private final AlphaVantageClient client;

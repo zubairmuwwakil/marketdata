@@ -44,7 +44,9 @@ public class ApiKeyController {
         store.set(key);
         int remaining = quotaService.resetToday().getCallsLimit();
         return ResponseEntity.ok(Map.of(
-                "message", "API key validated and saved",
+                "message", result.message() == null || result.message().isBlank()
+                        ? "API key validated and saved"
+                        : result.message(),
                 "status", result.status().name(),
                 "remainingQuotaReset", true,
                 "remaining", remaining,

@@ -1,6 +1,8 @@
 package com.zubairmuwwakil.marketdata.config;
 
 import com.zubairmuwwakil.marketdata.security.ApiKeyAuthFilter;
+import com.zubairmuwwakil.marketdata.security.ApiAuthenticationEntryPoint;
+import com.zubairmuwwakil.marketdata.security.ApiProblemResponseWriter;
 import com.zubairmuwwakil.marketdata.security.ApiKeyService;
 import com.zubairmuwwakil.marketdata.security.RateLimitFilter;
 import com.zubairmuwwakil.marketdata.service.ingestion.QuotaService;
@@ -20,16 +22,20 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    ApiKeyService apiKeyService,
                                                    com.zubairmuwwakil.marketdata.security.AppKeyQuotaService appKeyQuotaService,
+                                                   ApiAuthenticationEntryPoint apiAuthenticationEntryPoint,
+                                                   ApiProblemResponseWriter problemResponseWriter,
                                                    RateLimitProperties rateLimitProperties,
                                                    QuotaService quotaService) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(apiAuthenticationEntryPoint))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/",
                                 "/*.html",
                                 "/index.html",
+                                "/api/v1/demo/**",
                                 "/watchlist.html",
                                 "/indicators.html",
                                 "/swagger-ui/**",
@@ -43,8 +49,19 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").hasAnyRole("ADMIN", "USER")
                         .anyRequest().permitAll()
                 )
-                .addFilterBefore(new ApiKeyAuthFilter(apiKeyService, appKeyQuotaService), UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(new RateLimitFilter(rateLimitProperties, quotaService), ApiKeyAuthFilter.class);
+                .addFilterBefore(
+                        new ApiKeyAuthFilter(
+                                apiKeyService,
+                                appKeyQuotaService,
+                                apiAuthenticationEntryPoint,
+                                problemResponseWriter
+                        ),
+                        UsernamePasswordAuthenticationFilter.class
+                )
+                .addFilterAfter(
+                        new RateLimitFilter(rateLimitProperties, quotaService, problemResponseWriter),
+                        ApiKeyAuthFilter.class
+                );
 
         return http.build();
     }

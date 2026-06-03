@@ -34,6 +34,9 @@ public class ApiKeyRegistry {
     }
 
     public Optional<KeyRecord> findByKey(String key) {
+        if (key == null || key.isBlank()) {
+            return Optional.empty();
+        }
         return Optional.ofNullable(keys.get(key));
     }
 

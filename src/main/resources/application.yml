@@ -49,6 +49,10 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:marketdata}
     password: ${SPRING_DATASOURCE_PASSWORD:marketdata}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      initialization-fail-timeout: 0
+      connection-timeout: 5000
+      validation-timeout: 2000
 
   jpa:
     hibernate:
@@ -61,6 +65,8 @@ spring:
     user: ${SPRING_FLYWAY_USER:${SPRING_DATASOURCE_USERNAME:marketdata}}
     password: ${SPRING_FLYWAY_PASSWORD:${SPRING_DATASOURCE_PASSWORD:marketdata}}
     locations: classpath:db/migration
+    connect-retries: 12
+    connect-retries-interval: 5s
 
   cache:
     type: caffeine

@@ -4,13 +4,14 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.MediaType;
+import org.slf4j.MDC;
+import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,11 +25,18 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
 
     private final ApiKeyService apiKeyService;
     private final AppKeyQuotaService quotaService;
+    private final AuthenticationEntryPoint authenticationEntryPoint;
+    private final ApiProblemResponseWriter problemResponseWriter;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
-    public ApiKeyAuthFilter(ApiKeyService apiKeyService, AppKeyQuotaService quotaService) {
+    public ApiKeyAuthFilter(ApiKeyService apiKeyService,
+                            AppKeyQuotaService quotaService,
+                            AuthenticationEntryPoint authenticationEntryPoint,
+                            ApiProblemResponseWriter problemResponseWriter) {
         this.apiKeyService = apiKeyService;
         this.quotaService = quotaService;
+        this.authenticationEntryPoint = authenticationEntryPoint;
+        this.problemResponseWriter = problemResponseWriter;
     }
 
     @Override
@@ -45,7 +53,12 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         var principalOpt = apiKeyService.authenticate(apiKey);
 
         if (principalOpt.isEmpty()) {
-            respondUnauthorized(response);
+            SecurityContextHolder.clearContext();
+            authenticationEntryPoint.commence(
+                    request,
+                    response,
+                    new InsufficientAuthenticationException("Missing or invalid API key.")
+            );
             return;
         }
 
@@ -53,7 +66,7 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         try {
             quotaService.consume(apiKey);
         } catch (IllegalStateException ex) {
-            respondTooManyRequests(response);
+            problemResponseWriter.writeQuotaExceeded(response);
             return;
         }
         var auth = new UsernamePasswordAuthenticationToken(
@@ -77,30 +90,17 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
                 || pathMatcher.match("/index.html", path)
                 || pathMatcher.match("/watchlist.html", path)
                 || pathMatcher.match("/indicators.html", path)
+                || pathMatcher.match("/api/v1/demo/**", path)
                 || pathMatcher.match("/error", path)
                 || pathMatcher.match("/swagger-ui/**", path)
                 || pathMatcher.match("/v3/api-docs/**", path)
-            || pathMatcher.match("/api/v1/health", path)
+                || pathMatcher.match("/api/v1/health", path)
                 || pathMatcher.match("/actuator/health/**", path)
                 || pathMatcher.match("/actuator/info/**", path)
                 || pathMatcher.match("/css/**", path)
                 || pathMatcher.match("/js/**", path)
                 || pathMatcher.match("/assets/**", path)
                 || pathMatcher.match("/images/**", path);
-    }
-
-    private void respondUnauthorized(HttpServletResponse response) throws IOException {
-        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write("{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"Missing or invalid API key.\"}");
-    }
-
-    private void respondTooManyRequests(HttpServletResponse response) throws IOException {
-        response.setStatus(429);
-        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.getWriter().write("{\"title\":\"Quota Exceeded\",\"status\":429,\"detail\":\"MarketLens API key quota exceeded.\"}");
     }
 
     private String fingerprint(String apiKey) {

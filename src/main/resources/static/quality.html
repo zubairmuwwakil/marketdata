@@ -60,6 +60,7 @@
     </section>
   </main>
 
+  <script src="/js/demo-mode.js"></script>
   <script>
     const accessKeyBtn = document.getElementById('access-key-btn');
     const runBtn = document.getElementById('run-btn');
@@ -69,8 +70,9 @@
     const symbol = document.getElementById('symbol');
     const from = document.getElementById('from');
     const to = document.getElementById('to');
+    let demoConfig = null;
 
-    let accessKey = localStorage.getItem('marketlens_api_key') || '';
+    let accessKey = window.marketLensDemo.getStoredApiKey();
     const api = (path, opts = {}) => fetch(path, {
       headers: {
         'Content-Type': 'application/json',
@@ -85,11 +87,9 @@
     };
 
     const promptKey = () => {
-      const next = prompt('Enter MarketLens API Key (default: change-me-user)', accessKey || '');
+      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
       if (next === null) return false;
-      accessKey = next.trim();
-      if (accessKey) localStorage.setItem('marketlens_api_key', accessKey);
-      else localStorage.removeItem('marketlens_api_key');
+      accessKey = window.marketLensDemo.saveApiKey(next);
       return true;
     };
 
@@ -125,6 +125,24 @@
         setStatus(`Failed: ${err.message}`, true);
       }
     });
+
+    async function initDemo() {
+      demoConfig = await window.marketLensDemo.load();
+      accessKey = window.marketLensDemo.getStoredApiKey();
+      if (demoConfig) {
+        window.marketLensDemo.insertBanner(
+          document.querySelector('main'),
+          demoConfig,
+          'The quality report defaults to the seeded symbol with an intentional one-day gap so missing-day handling is easy to show.'
+        );
+        window.marketLensDemo.setValueIfEmpty(symbol, demoConfig.qualitySymbol);
+        from.value = demoConfig.defaultFrom;
+        to.value = demoConfig.defaultTo;
+        runBtn.click();
+      }
+    }
+
+    initDemo();
   </script>
 </body>
 </html>
