@@ -1,264 +1,336 @@
-# MarketLens (marketdata)
+# MarketLens
 
-MarketLens is a Spring Boot 4 (Java 21) market data pipeline and analytics service with a modern UX, API key auth, rate limiting, OpenAPI docs, data quality checks, and operational observability.
+MarketLens is a Spring Boot market data pipeline and analytics service for equities. It ingests Alpha Vantage daily price data, stores it in PostgreSQL, calculates indicators, tracks ingestion runs, exposes API-key-protected REST endpoints, and includes static operational dashboards for local or demo use.
 
-## Highlights
+## What It Does
 
-- **Market data ingestion** with idempotent runs, retries, and backfills.
-- **Technical indicators** (RSI, MACD) and cursor-style pagination.
-- **Corporate actions** and **split-adjusted prices**.
-- **Market calendar** (NYSE trading days + holidays).
-- **Data quality reports** (missing days, duplicates, outliers, early-close awareness).
-- **Rate limiting** and **daily quota tracking**.
-- **OpenAPI/Swagger** docs and **Prometheus** metrics.
-- **Structured JSON logging**.
-- **Caching** for calendar and adjusted prices.
-- **Distributed tracing** via OTLP.
-- **Partitioned price candles** for scale.
-- **Quarantine queue** for malformed ingestion rows.
+- Ingests daily and backfilled market data for a configurable watchlist.
+- Stores normalized OHLCV candles with Flyway-managed PostgreSQL migrations.
+- Calculates RSI, EMA, and MACD technical indicators.
+- Tracks pipeline runs, retries, provider quota usage, and malformed rows.
+- Supports corporate actions and split-adjusted price queries.
+- Provides NYSE trading calendar and early-close awareness.
+- Reports data quality issues such as missing days, duplicates, and outliers.
+- Secures APIs with API keys, roles, rate limiting, and quota headers.
+- Exposes Swagger/OpenAPI docs, health checks, Prometheus metrics, JSON logs, and optional OTLP tracing.
+- Ships with static dashboard pages for watchlists, runs, indicators, quality, corporate actions, calendar, API keys, and status.
 
 ## Tech Stack
 
-- Java 21, Spring Boot 4.0.1
-- PostgreSQL + Flyway
-- Spring Data JPA
-- Spring Security (API key auth)
+- Java 21
+- Spring Boot 4.0.1
+- Spring Web, Spring Data JPA, Spring Security, Actuator
+- PostgreSQL 16 locally via Docker Compose
+- Flyway migrations
+- Alpha Vantage market data provider
 - Springdoc OpenAPI
-- Micrometer Prometheus
-- Micrometer Tracing (OTLP)
+- Micrometer, Prometheus, OTLP tracing
 - Caffeine cache
 - Bucket4j rate limiting
+- Testcontainers for integration tests
 
 ## Quick Start
 
-### Prerequisites
-
-- Java 21
-- Maven (or use `./mvnw`)
-- PostgreSQL 13+
-
-### Configure environment
-
-Set the following environment variables (or update `src/main/resources/application.yml`):
-
-- `SPRING_DATASOURCE_URL` (default: `jdbc:postgresql://localhost:5433/marketdata`)
-- `SPRING_DATASOURCE_USERNAME` (default: `marketdata`)
-- `SPRING_DATASOURCE_PASSWORD` (default: `marketdata`)
-- `DATABASE_URL` (optional Render-style connection string, e.g. `postgresql://user:password@host:5432/marketdata`)
-- `MARKETDATA_ADMIN_KEY` (admin API key)
-- `MARKETDATA_USER_KEY` (user API key)
-- `ALPHAVANTAGE_API_KEY` (provider key)
-- `OTEL_EXPORTER_OTLP_ENDPOINT` (optional tracing endpoint)
-
-### Run the app
-
-```bash
-./mvnw spring-boot:run
-```
-
-The app will start on `http://localhost:8080`.
-
 ### Demo Mode
 
-For interview demos, you can boot MarketLens with seeded data and no external services:
+Use demo mode when you want to see the product without PostgreSQL or an Alpha Vantage key.
 
 ```bash
 ./mvnw -Pdemo spring-boot:run
 ```
 
-Demo mode uses an in-memory H2 database, skips Flyway/Postgres setup, bypasses Alpha Vantage validation, and preloads:
+Then open:
+
+- Dashboard: `http://localhost:8080/`
+- Swagger UI: `http://localhost:8080/swagger-ui`
+- Health: `http://localhost:8080/api/v1/health`
+
+Demo mode uses an in-memory H2 database, disables Flyway, seeds realistic data, and auto-loads the demo admin key in browser storage when needed.
+
+Seeded data includes:
 
 - Active watchlist symbols: `MSFT`, `AAPL`, `NVDA`, `SPY`
-- One inactive symbol with an intentional data gap for quality demos: `TSLA`
-- Seeded RSI/MACD indicator history
-- Corporate actions, pipeline runs, quota usage, and a quarantine example
+- An inactive `TSLA` symbol with an intentional data gap for quality checks
+- RSI/MACD indicator history
+- Corporate actions
+- Pipeline runs
+- Provider quota usage
+- One quarantine example
 
-Open `http://localhost:8080/` after startup. If browser storage is empty, the UI auto-loads the demo admin key so the full workspace, including admin pages, is immediately usable.
+### Local PostgreSQL Mode
 
-Use `./mvnw verify` to run unit tests plus the deploy smoke test that packages the jar, boots it with a Render-style `DATABASE_URL`, runs Flyway migrations, and checks `/api/v1/health`.
+Start the database:
 
-## UX Pages
-
-- `http://localhost:8080/` – MarketLens dashboard
-- `http://localhost:8080/watchlist.html`
-- `http://localhost:8080/indicators.html`
-- `http://localhost:8080/runs.html`
-- `http://localhost:8080/quality.html`
-- `http://localhost:8080/actions.html`
-- `http://localhost:8080/calendar.html`
-- `http://localhost:8080/keys.html`
-- `http://localhost:8080/status.html`
-
-> The UI uses the **MarketLens API key** (default `change-me-user`) and sends it as `X-API-Key` for all API calls.
-
-## API Documentation
-
-- Swagger UI: `http://localhost:8080/swagger-ui`
-- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
-
-## Documentation
-
-- Project docs live in [docs/README.md](docs/README.md)
-
-## Authentication & Authorization
-
-All API calls under `/api/**` require an API key header:
-
+```bash
+docker-compose up -d
 ```
+
+Export local configuration:
+
+```bash
+export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5433/marketdata
+export SPRING_DATASOURCE_USERNAME=marketdata
+export SPRING_DATASOURCE_PASSWORD=marketdata
+export MARKETDATA_ADMIN_KEY=change-me-admin
+export MARKETDATA_USER_KEY=change-me-user
+export ALPHAVANTAGE_API_KEY=your-alpha-vantage-key
+```
+
+Run the service:
+
+```bash
+./mvnw spring-boot:run
+```
+
+The application starts on `http://localhost:8080`.
+
+## Environment Variables
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `SPRING_DATASOURCE_URL` | No | `jdbc:postgresql://localhost:5433/marketdata` | JDBC URL for the application datasource. |
+| `SPRING_DATASOURCE_USERNAME` | No | `marketdata` | Database username. |
+| `SPRING_DATASOURCE_PASSWORD` | No | `marketdata` | Database password. |
+| `SPRING_FLYWAY_URL` | No | datasource URL | Optional Flyway-specific JDBC URL. |
+| `SPRING_FLYWAY_USER` | No | datasource username | Optional Flyway-specific database user. |
+| `SPRING_FLYWAY_PASSWORD` | No | datasource password | Optional Flyway-specific database password. |
+| `DATABASE_URL` | No | unset | Render-style PostgreSQL URL. Used when datasource env vars are not set. |
+| `MARKETDATA_ADMIN_KEY` | No | `change-me-admin` | Admin API key for protected admin endpoints. |
+| `MARKETDATA_USER_KEY` | No | `change-me-user` | User API key for regular API access. |
+| `ALPHAVANTAGE_API_KEY` | Yes outside demo | unset | Alpha Vantage provider key. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | `http://localhost:4317` | OTLP tracing endpoint. |
+
+Do not use the default API keys in shared or production environments.
+
+## UI Pages
+
+All pages are served by the Spring Boot app:
+
+| Page | URL |
+| --- | --- |
+| Dashboard | `http://localhost:8080/` |
+| Watchlist | `http://localhost:8080/watchlist.html` |
+| Indicators | `http://localhost:8080/indicators.html` |
+| Ingestion runs | `http://localhost:8080/runs.html` |
+| Data quality | `http://localhost:8080/quality.html` |
+| Corporate actions | `http://localhost:8080/actions.html` |
+| Market calendar | `http://localhost:8080/calendar.html` |
+| API keys | `http://localhost:8080/keys.html` |
+| Status | `http://localhost:8080/status.html` |
+
+The UI sends API requests with the `X-API-Key` header.
+
+## API Authentication
+
+All `/api/**` routes require an API key unless explicitly public.
+
+```http
 X-API-Key: <your-key>
 ```
 
-Roles are derived from the configured key list:
+Configured keys map to roles:
 
-- **ADMIN**: access to `/api/v1/admin/**` and `/actuator/prometheus`
-- **USER**: access to `/api/**`
+| Role | Access |
+| --- | --- |
+| `USER` | General `/api/**` access plus provider key validation and quota status. |
+| `ADMIN` | User access plus `/api/v1/admin/**` and `/actuator/prometheus`. |
 
-Default local keys (update for production):
+Public endpoints include:
 
-- `change-me-user`
-- `change-me-admin`
+- `/`
+- `/*.html`
+- `/api/v1/demo/**`
+- `/api/v1/health`
+- `/swagger-ui/**`
+- `/v3/api-docs/**`
+- `/actuator/health/**`
+- `/actuator/info/**`
 
-Public endpoints include `/`, `/*.html`, `/swagger-ui/**`, `/v3/api-docs/**`, `/api/v1/health`, `/actuator/health/**`, `/actuator/info/**`.
+## Core API Endpoints
 
-## Rate Limiting & Quotas
+| Area | Method | Endpoint |
+| --- | --- | --- |
+| Health | `GET` | `/api/v1/health` |
+| Watchlist | `GET` | `/api/v1/watchlist` |
+| Watchlist | `PUT` | `/api/v1/watchlist` |
+| Ingestion | `POST` | `/api/v1/ingestion/run` |
+| Ingestion | `POST` | `/api/v1/ingestion/backfill` |
+| Ingestion | `GET` | `/api/v1/ingestion/runs?limit=20` |
+| Ingestion | `GET` | `/api/v1/ingestion/runs/latest` |
+| Ingestion | `GET` | `/api/v1/ingestion/runs/{id}` |
+| Ingestion | `POST` | `/api/v1/ingestion/runs/{id}/retry` |
+| Quarantine | `GET` | `/api/v1/ingestion/quarantine?symbol=MSFT&from=2024-01-01&to=2024-12-31&limit=200` |
+| Market data | `GET` | `/api/v1/market/summary?active=true` |
+| Market data | `GET` | `/api/v1/market/adjusted?symbol=MSFT&from=2024-01-01&to=2024-12-31` |
+| Indicators | `GET` | `/api/v1/indicators/{symbol}` |
+| Indicators | `GET` | `/api/v1/indicators/{symbol}/{type}` |
+| Corporate actions | `GET` | `/api/v1/corporate-actions?symbol=MSFT` |
+| Corporate actions | `POST` | `/api/v1/corporate-actions` |
+| Calendar | `GET` | `/api/v1/calendar/nyse?from=2026-01-01&to=2026-12-31` |
+| Calendar | `GET` | `/api/v1/calendar/nyse/early-closes?from=2026-01-01&to=2026-12-31` |
+| Data quality | `GET` | `/api/v1/quality/report?symbol=MSFT&from=2024-01-01&to=2024-12-31` |
+| Provider key | `POST` | `/api/v1/admin/api-key` |
+| Provider quota | `GET` | `/api/v1/admin/quota` |
+| API key admin | `GET` | `/api/v1/admin/keys` |
+| API key admin | `POST` | `/api/v1/admin/keys` |
+| API key admin | `POST` | `/api/v1/admin/keys/{keyId}/rotate` |
+| API key admin | `DELETE` | `/api/v1/admin/keys/{keyId}` |
 
-Rate limiting is enforced on `/api/**` and returns standard headers:
+Ingestion run and backfill requests accept an optional `Idempotency-Key` header.
+
+## Example Requests
+
+Set the active watchlist:
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/watchlist \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: change-me-user' \
+  -d '{"symbols":["MSFT","AAPL","NVDA","SPY"]}'
+```
+
+Run daily ingestion:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/ingestion/run \
+  -H 'X-API-Key: change-me-admin' \
+  -H 'Idempotency-Key: daily-2026-08-05'
+```
+
+Backfill a date range:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/ingestion/backfill \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: change-me-admin' \
+  -H 'Idempotency-Key: backfill-msft-2024' \
+  -d '{"symbols":["MSFT"],"from":"2024-01-01","to":"2024-12-31"}'
+```
+
+Fetch indicators:
+
+```bash
+curl http://localhost:8080/api/v1/indicators/MSFT \
+  -H 'X-API-Key: change-me-user'
+```
+
+Fetch adjusted prices:
+
+```bash
+curl "http://localhost:8080/api/v1/market/adjusted?symbol=MSFT&from=2024-01-01&to=2024-12-31" \
+  -H 'X-API-Key: change-me-user'
+```
+
+Check provider quota:
+
+```bash
+curl http://localhost:8080/api/v1/admin/quota \
+  -H 'X-API-Key: change-me-user'
+```
+
+## Rate Limits And Quotas
+
+Rate limiting applies to `/api/**` responses and emits:
 
 - `X-RateLimit-Limit`
 - `X-RateLimit-Remaining`
 - `X-RateLimit-Reset`
 
-Daily quota headers are also included:
+Provider quota headers are also included:
 
 - `X-Quota-Limit`
 - `X-Quota-Remaining`
 
-## Core API Endpoints
+MarketLens tracks two quota concepts:
 
-### Health
+- Per-application-key request quotas for API consumers.
+- Alpha Vantage provider quota usage for ingestion calls.
 
-- `GET /api/v1/health`
+## Database
 
-### Ingestion Runs
+Flyway migrations live in `src/main/resources/db/migration`.
 
-- `POST /api/v1/ingestion/run`
-- `POST /api/v1/ingestion/backfill`
-- `GET /api/v1/ingestion/runs`
-- `GET /api/v1/ingestion/runs/latest`
-- `GET /api/v1/ingestion/runs/{id}`
+The schema includes:
 
-### Watchlist
+- Watchlist symbols
+- Price candles partitioned by year
+- Technical indicators
+- Provider quota usage
+- Pipeline runs
+- Corporate actions
+- Ingestion quarantine entries
 
-- `GET /api/v1/watchlist`
-- `POST /api/v1/watchlist`
-- `DELETE /api/v1/watchlist/{symbol}`
-
-### Indicators
-
-- `GET /api/v1/indicators/{symbol}`
-- `GET /api/v1/indicators/{symbol}/{type}`
-
-### Market Data
-
-- `GET /api/v1/market/adjusted?symbol=MSFT&from=2024-01-01&to=2024-12-31`
-
-### Corporate Actions
-
-- `GET /api/v1/corporate-actions?symbol=MSFT`
-- `POST /api/v1/corporate-actions`
-
-### Market Calendar
-
-- `GET /api/v1/calendar/nyse?from=2025-01-01&to=2025-12-31`
-- `GET /api/v1/calendar/nyse?from=2025-01-01&to=2025-12-31&excludeEarlyCloses=true`
-- `GET /api/v1/calendar/nyse/early-closes?from=2025-01-01&to=2025-12-31`
-
-### Data Quality
-
-- `GET /api/v1/quality/report?symbol=MSFT&from=2024-01-01&to=2024-12-31`
-
-### Quarantine
-
-- `GET /api/v1/ingestion/quarantine?symbol=MSFT&from=2024-01-01&to=2024-12-31&limit=200`
-
-### API Key Admin
-
-- `POST /api/v1/admin/api-key`
-- `GET /api/v1/admin/keys`
-- `POST /api/v1/admin/keys`
-- `POST /api/v1/admin/keys/{keyId}/rotate`
-- `DELETE /api/v1/admin/keys/{keyId}`
-
-## Example Requests
-
-### Ingest latest data
-
-```bash
-curl -X POST http://localhost:8080/api/v1/ingestion/run \
-  -H 'X-API-Key: YOUR_KEY'
-```
-
-### Fetch indicators
-
-```bash
-curl http://localhost:8080/api/v1/indicators/MSFT \
-  -H 'X-API-Key: YOUR_KEY'
-```
-
-### Adjusted prices
-
-```bash
-curl "http://localhost:8080/api/v1/market/adjusted?symbol=MSFT&from=2024-01-01&to=2024-12-31" \
-  -H 'X-API-Key: YOUR_KEY'
-```
-
-## Database & Migrations
-
-Flyway migrations are located in `src/main/resources/db/migration`.
-
-Recent changes include:
-
-- Pipeline run metadata and idempotency key
-- Corporate actions table
-- Yearly partitioning of `price_candle`
-- Ingestion quarantine table
-
-## Observability
-
-- JSON structured logs via `logback-spring.xml`
-- Prometheus metrics at `/actuator/prometheus` (ADMIN only)
-- OTLP tracing via `OTEL_EXPORTER_OTLP_ENDPOINT`
-
-## Caching
-
-- Calendar and adjusted prices are cached in-memory (Caffeine)
-
-## Configuration Notes
-
-All settings live in `src/main/resources/application.yml`, including:
-
-- API key list and roles
-- Rate limits & quotas
-- Retention settings
-- NYSE holidays
-- NYSE early closes
-- External API timeouts, retry, and circuit breaker
-- OpenAPI paths
-
-## Development Tips
-
-- If you change migrations locally, reset your database or adjust Flyway history.
-- Use the UI “Set API Key” action to validate and save a provider API key.
-- The Runs page includes a quarantine browser to review malformed rows.
-
-## CI
-
-- GitHub Actions workflow in [.github/workflows/ci.yml](.github/workflows/ci.yml)
+If you change migrations during local development, reset the local database or repair the Flyway history before rerunning the app.
 
 ## Testing
 
-- Integration tests use Testcontainers. You need Docker running locally for `./mvnw test`.
+Run unit and slice tests:
 
-## License
+```bash
+./mvnw test
+```
 
-MIT (add or update as needed).
+Run the full verification suite:
+
+```bash
+./mvnw verify
+```
+
+`verify` packages the jar, runs integration tests, starts a PostgreSQL Testcontainers database, boots the app with a Render-style `DATABASE_URL`, runs Flyway migrations, and checks `/api/v1/health`.
+
+Docker must be running for tests that use Testcontainers.
+
+## Observability
+
+- Health: `/actuator/health`
+- Info: `/actuator/info`
+- Metrics: `/actuator/metrics`
+- Prometheus: `/actuator/prometheus` with an `ADMIN` key
+- OpenAPI JSON: `/v3/api-docs`
+- Swagger UI: `/swagger-ui`
+- JSON application logs: `logs/marketdata.log`
+- Optional OTLP tracing through `OTEL_EXPORTER_OTLP_ENDPOINT`
+
+## Deployment
+
+The repository includes:
+
+- `Dockerfile` for containerized builds.
+- `render.yaml` for Render web service plus managed PostgreSQL deployment.
+
+For Render, set `ALPHAVANTAGE_API_KEY`, `MARKETDATA_ADMIN_KEY`, and `MARKETDATA_USER_KEY` as environment variables. The blueprint wires `DATABASE_URL` from the managed database.
+
+## Documentation
+
+Additional docs live under `docs/`:
+
+- [Documentation index](docs/README.md)
+- [Architecture](docs/architecture.md)
+- [Repository structure](docs/structure.md)
+- [Development guide](docs/development.md)
+- [Runbook](docs/runbook.md)
+- [SLOs and alerts](docs/slo-alerts.md)
+- [Security](docs/security.md)
+- [Accessibility](docs/accessibility.md)
+- [Reference](docs/reference.md)
+- [Architecture decisions](docs/decisions/README.md)
+
+## Repository Layout
+
+```text
+src/main/java/com/zubairmuwwakil/marketdata
+  client/          Alpha Vantage client and external service errors
+  config/          Spring, OpenAPI, cache, security, and property configuration
+  controller/      REST API controllers
+  demo/            Demo profile seed data and demo configuration endpoints
+  model/           DTOs and JPA entities
+  observability/   Request ID filter
+  repository/      Spring Data repositories and custom upsert logic
+  resilience/      Simple circuit breaker
+  security/        API key auth, quotas, and rate limiting
+  service/         Ingestion, indicators, calendar, quality, retention, market data
+
+src/main/resources
+  db/migration/    Flyway SQL migrations
+  static/          Static dashboard pages
+```
