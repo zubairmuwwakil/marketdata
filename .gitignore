@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Build / editor / runtime artifacts ###
+node_modules/
+logs/
+/META-INF/
+.DS_Store
