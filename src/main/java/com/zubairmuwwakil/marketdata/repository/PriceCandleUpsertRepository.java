@@ -7,7 +7,8 @@ import org.springframework.stereotype.Repository;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Repository
@@ -45,7 +46,9 @@ public class PriceCandleUpsertRepository {
                         source = EXCLUDED.source
                 """;
 
-        Instant createdAt = Instant.now();
+        // TIMESTAMPTZ column: pgjdbc cannot infer a SQL type for a bare Instant,
+        // so bind an OffsetDateTime. Same instant, a type the driver can map.
+        OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC);
 
         int[][] counts = jdbcTemplate.batchUpdate(sql, candles, candles.size(), (ps, c) -> {
             ps.setString(1, symbol);
