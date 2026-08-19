@@ -5,7 +5,7 @@ Decision record: ../MoneyTalks/docs/decisions/2026-08-16-one-money-app.md · new
 @ECOSYSTEM.md
 
 - **MarketLens is the single owner of market data and investment analytics** for the ecosystem (E3): OHLCV, indicators, corporate actions, calendars, data quality. The unifier consumes this service and never re-implements market data.
-- **Do NOT grow personal-finance features here.** Purchases, cards, budgets, and the complete financial picture belong to the unifier. This repo answers "what is this security worth and how has it behaved," nothing wider.
+- **Do NOT grow personal-finance features here.** Purchases, cards, budgets, and the complete financial picture belong to Inunity (the hub). This repo answers "what is this security worth and how has it behaved," nothing wider.
 - **Say daily/latest pricing, never real-time** — in docs, API copy, and dashboards — unless the infrastructure actually changes (honesty invariant, A6).
 - **MarketLens stands alone as its own product.** MoneyTalks is its first consumer, not its purpose. Every capability ships as a public one: API-key auth, OpenAPI, a dashboard page, and demo-mode support. Do NOT add consumer-shaped endpoints — in particular **no portfolio-valuation endpoint** that takes quantities and returns a total, which would make this service own the complete financial picture and weld it to one caller's data model. Symbols in, prices-with-currency-and-staleness out.
 - **Demo mode is a product surface, not a test fixture.** `./mvnw -Pdemo spring-boot:run` needs no PostgreSQL and no provider key. A new capability that only works with a real database regresses the standalone story — wire it into the demo profile and the static dashboards too.
