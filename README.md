@@ -282,6 +282,22 @@ Run the full verification suite:
 
 Docker must be running for tests that use Testcontainers.
 
+### Running against colima
+
+Colima's Docker daemon runs inside a Linux VM, so Testcontainers needs to be
+told how to reach it and how Ryuk (the cleanup sidecar) should mount the
+socket:
+
+```bash
+export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"
+export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+./mvnw verify
+```
+
+Without `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`, Ryuk fails to start with a
+`mount source path ... operation not supported` error, because it tries to
+bind-mount the host-side socket path, which doesn't exist inside the VM.
+
 ## Observability
 
 - Health: `/actuator/health`
