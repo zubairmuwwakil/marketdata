@@ -21,7 +21,7 @@ import java.time.LocalDate;
 public class PriceCandle {
 
     @Id
-    @Column(nullable = false, length = 10)
+    @Column(nullable = false, length = 20)
     private String symbol;
 
     @Id
@@ -49,6 +49,14 @@ public class PriceCandle {
 
     @Column(nullable = false, length = 20)
     private String source;
+
+    /**
+     * ISO-4217 the price is quoted in, or null when the provider did not report
+     * one. Null means unknown, never "assume USD": prices in different currencies
+     * cannot be summed, so a consumer must fail closed rather than guess.
+     */
+    @Column(length = 3)
+    private String currency;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

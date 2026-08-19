@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zubairmuwwakil.marketdata.config.ExternalApiProperties;
 import com.zubairmuwwakil.marketdata.config.MarketDataProperties;
 import com.zubairmuwwakil.marketdata.resilience.SimpleCircuitBreaker;
-import com.zubairmuwwakil.marketdata.service.ingestion.ApiKeyStore;
+import com.zubairmuwwakil.marketdata.security.ProviderCredentials;
+import com.zubairmuwwakil.marketdata.service.ingestion.ProviderKeyStore;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -20,10 +21,12 @@ import java.util.function.Supplier;
 @Component
 public class AlphaVantageClient {
 
+    public static final String SOURCE_NAME = "ALPHAVANTAGE";
+
     private final RestClient restClient;
     private final MarketDataProperties props;
     private final ObjectMapper objectMapper;
-    private final ApiKeyStore apiKeyStore;
+    private final ProviderKeyStore providerKeyStore;
     private final ExternalApiProperties externalApiProperties;
     private final SimpleCircuitBreaker circuitBreaker;
     private final boolean demoMode;
@@ -38,12 +41,12 @@ public class AlphaVantageClient {
 
     public AlphaVantageClient(MarketDataProperties props,
                               ObjectMapper objectMapper,
-                              ApiKeyStore apiKeyStore,
+                              ProviderKeyStore providerKeyStore,
                               ExternalApiProperties externalApiProperties,
                               Environment environment) {
         this.props = props;
         this.objectMapper = objectMapper;
-        this.apiKeyStore = apiKeyStore;
+        this.providerKeyStore = providerKeyStore;
         this.externalApiProperties = externalApiProperties;
         this.demoMode = environment.matchesProfiles("demo");
 
@@ -53,7 +56,7 @@ public class AlphaVantageClient {
         }
 
         if (av.apiKey() != null && !av.apiKey().isBlank()) {
-            this.apiKeyStore.set(av.apiKey());
+            this.providerKeyStore.set(av.apiKey());
         }
 
         HttpClient httpClient = HttpClient.newBuilder()
@@ -77,10 +80,17 @@ public class AlphaVantageClient {
         if (demoMode) {
             throw new IllegalStateException("Demo profile uses seeded market data and does not call Alpha Vantage.");
         }
-        String key = apiKeyStore.get();
-        if (key == null || key.isBlank()) {
-            throw new IllegalStateException("ALPHAVANTAGE_API_KEY is missing/blank");
+        // BYOK: the caller's own key wins over the app key, so their data can be
+        // fetched under their own licence and quota (ADR 0003 section 8).
+        ProviderKeyStore.ResolvedKey resolved = providerKeyStore.resolve(SOURCE_NAME);
+        if (!resolved.isPresent()) {
+            throw new IllegalStateException(
+                    "No Alpha Vantage credential available. Supply one per-request via the "
+                    + ProviderCredentials.HEADER + " header, or set ALPHAVANTAGE_API_KEY "
+                    + "(the dashboard key is an in-memory session override and does not "
+                    + "survive a restart).");
         }
+        String key = resolved.key();
 
         return executeWithResilience(() -> {
             String body = restClient.get()

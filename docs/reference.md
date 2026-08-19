@@ -25,3 +25,13 @@ Due to Maven's design, elements are inherited from the parent POM to the project
 While most of the inheritance is fine, it also inherits unwanted elements like `<license>` and `<developers>` from the parent.
 To prevent this, the project POM contains empty overrides for these elements.
 If you manually switch to a different parent and actually want the inheritance, you need to remove those overrides.
+
+## Environment
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MARKETDATA_YAHOO_ENABLED` | `true` | Kill switch for the Yahoo quote provider. Turning it off does not break the quote path — cached last-known prices are still served, labelled stale. |
+| `MARKETDATA_YAHOO_DAILY_BUDGET` | `2000` | Self-imposed politeness cap, **not** a vendor-published limit. Yahoo does not sanction this access, so we choose a ceiling rather than discover theirs. |
+| `MARKETDATA_QUOTE_REFRESH_CRON` | `0 30 22 * * *` | Nightly sweep that warms demand-registered symbols, after the US close. |
+| `marketdata.retention.tracked-symbol-days` | `90` | Retires symbols nobody has asked about in this long. |
+| `ALPHAVANTAGE_API_KEY` | — | The durable app-level provider key. The `keys.html` field is an in-memory **session override** that does not survive a restart (this service spins down when idle on its hosting plan). |

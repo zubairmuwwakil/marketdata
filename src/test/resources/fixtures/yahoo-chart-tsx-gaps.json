@@ -1,0 +1,28 @@
+{
+  "chart": {
+    "error": null,
+    "result": [
+      {
+        "meta": {
+          "currency": "CAD",
+          "symbol": "VFV.TO",
+          "exchangeTimezoneName": "America/Toronto",
+          "instrumentType": "ETF",
+          "regularMarketPrice": 149.11
+        },
+        "timestamp": [1786363200, 1786449600, 1786536000, 1786622400],
+        "indicators": {
+          "quote": [
+            {
+              "open":   [142.10, null,   143.55, 144.00],
+              "high":   [142.90, 143.20, 144.10, 144.80],
+              "low":    [141.80, 142.60, 143.20, 143.90],
+              "close":  [142.30, 142.95, null,   144.55],
+              "volume": [120400, 98000,  110500, null]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

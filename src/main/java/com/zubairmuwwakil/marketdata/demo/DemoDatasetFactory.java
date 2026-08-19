@@ -99,6 +99,18 @@ public class DemoDatasetFactory {
         }
 
         DemoDataset current = dataset();
+
+        // Only symbols this demo actually models get a series. Previously any string
+        // produced a plausible-looking price, because specFor() falls through to a
+        // generic spec — so asking for a symbol that does not exist returned a
+        // confident number. That was invisible while the only caller iterated the
+        // seeded watchlist; the quote path accepts arbitrary user input, where an
+        // invented price for a typo'd ticker is exactly the fabrication this service
+        // promises never to produce. Unknown symbols now resolve to UNAVAILABLE.
+        if (!current.candlesBySymbol().containsKey(normalized)) {
+            return List.of();
+        }
+
         List<LocalDate> tradingDays = calendarService.tradingDaysBetween(from, to);
         if (tradingDays.isEmpty()) {
             return List.of();

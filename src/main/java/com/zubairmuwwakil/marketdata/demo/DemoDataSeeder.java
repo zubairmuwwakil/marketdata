@@ -46,6 +46,7 @@ public class DemoDataSeeder {
                                    IngestionQuarantineRepository quarantineRepository) {
         return args -> {
             createQuarantineTable(jdbcTemplate);
+            createTrackedSymbolTable(jdbcTemplate);
             if (priceCandleRepository.count() > 0) {
                 return;
             }
@@ -58,6 +59,22 @@ public class DemoDataSeeder {
             seedRunsAndQuarantine(dataset, pipelineRunRepository, quarantineRepository);
             seedQuota(quotaUsageRepository);
         };
+    }
+
+    // tracked_symbol has no JPA entity (it is JdbcTemplate-only, like the quarantine
+    // table), and demo mode disables Flyway — so nothing else would create it here.
+    private void createTrackedSymbolTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS tracked_symbol (
+                    symbol             VARCHAR(20) PRIMARY KEY,
+                    asset_class        VARCHAR(16) NOT NULL DEFAULT 'EQUITY',
+                    first_requested_at TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_requested_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    request_count      BIGINT      NOT NULL DEFAULT 0,
+                    last_resolved_at   TIMESTAMP,
+                    last_status        VARCHAR(20)
+                )
+                """);
     }
 
     private void createQuarantineTable(JdbcTemplate jdbcTemplate) {
@@ -101,6 +118,11 @@ public class DemoDataSeeder {
                         .volume(candle.volume())
                         .adjusted(false)
                         .source("DEMO")
+                        // Synthetic series, USD by construction. Stated rather than
+                        // left null, because a null currency correctly means "no
+                        // provider reported one" and makes a consumer fail closed —
+                        // which would leave the demo unable to value anything.
+                        .currency("USD")
                         .build()
         )));
         priceCandleRepository.saveAll(candles);

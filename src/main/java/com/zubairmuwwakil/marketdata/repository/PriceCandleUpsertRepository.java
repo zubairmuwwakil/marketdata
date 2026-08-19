@@ -22,20 +22,25 @@ public class PriceCandleUpsertRepository {
         this.h2Database = detectH2(jdbcTemplate.getDataSource());
     }
 
-    public int upsertAll(String symbol, List<DailyCandle> candles, boolean adjusted, String source) {
+    /**
+     * @param currency ISO-4217 the provider quoted these prices in, or null when it
+     *                 reported none. Stored as given — a guessed currency is worse
+     *                 than an absent one, because an absent one fails closed.
+     */
+    public int upsertAll(String symbol, List<DailyCandle> candles, boolean adjusted, String source, String currency) {
         if (candles == null || candles.isEmpty()) {
             return 0;
         }
         String sql = h2Database ? """
                 MERGE INTO price_candle
-                    (symbol, trade_date, open, high, low, close, volume, adjusted, source, created_at)
+                    (symbol, trade_date, open, high, low, close, volume, adjusted, source, created_at, currency)
                 KEY (symbol, trade_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 : """
                 INSERT INTO price_candle
-                    (symbol, trade_date, open, high, low, close, volume, adjusted, source, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (symbol, trade_date, open, high, low, close, volume, adjusted, source, created_at, currency)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (symbol, trade_date) DO UPDATE
                     SET open = EXCLUDED.open,
                         high = EXCLUDED.high,
@@ -43,7 +48,10 @@ public class PriceCandleUpsertRepository {
                         close = EXCLUDED.close,
                         volume = EXCLUDED.volume,
                         adjusted = EXCLUDED.adjusted,
-                        source = EXCLUDED.source
+                        source = EXCLUDED.source,
+                        -- Never let a provider that reports no currency erase one a
+                        -- better-informed provider already established.
+                        currency = COALESCE(EXCLUDED.currency, price_candle.currency)
                 """;
 
         // TIMESTAMPTZ column: pgjdbc cannot infer a SQL type for a bare Instant,
@@ -61,6 +69,7 @@ public class PriceCandleUpsertRepository {
             ps.setBoolean(8, adjusted);
             ps.setString(9, source);
             ps.setObject(10, createdAt);
+            ps.setString(11, currency);
         });
         int total = 0;
         for (int[] batch : counts) {

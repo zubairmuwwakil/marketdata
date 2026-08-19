@@ -55,7 +55,7 @@ class MarketdataApplicationTests {
                 new BigDecimal("105.00"),
                 1_000L
         );
-        priceCandleUpsertRepository.upsertAll("MSFT", List.of(candle), false, "TEST");
+        priceCandleUpsertRepository.upsertAll("MSFT", List.of(candle), false, "TEST", "USD");
 
         var results = priceCandleRepository.findBySymbolAndTradeDateBetweenOrderByTradeDateAsc("MSFT", date, date);
         Assertions.assertThat(results).hasSize(1);

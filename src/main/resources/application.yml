@@ -26,8 +26,28 @@ marketdata:
       failure-threshold: 5
       open-state-duration: 30s
       half-open-max-calls: 2
+  providers:
+    # Routing is by purpose, not one global default (ADR 0003). Both paths serve
+    # daily closes — the split is sanction and quota, not latency.
+    ingestion-equity: ALPHAVANTAGE   # curated watchlist: licensed, 25 calls/day
+    quotes-equity: YAHOO             # dynamic per-user symbols: unlicensed, has headroom
+    refresh-cron: ${MARKETDATA_QUOTE_REFRESH_CRON:0 30 22 * * *}
+    yahoo:
+      enabled: ${MARKETDATA_YAHOO_ENABLED:true}
+      base-url: https://query1.finance.yahoo.com
+      # Self-imposed politeness cap, NOT a vendor-published limit: Yahoo does not
+      # sanction this access, so we pick a ceiling rather than discover theirs.
+      daily-budget: ${MARKETDATA_YAHOO_DAILY_BUDGET:2000}
+      # Yahoo has no working batch endpoint (v7 answers 401), so a batch of N
+      # symbols costs N requests. These three bound the fan-out.
+      max-symbols-per-request: 50
+      max-concurrency: 4
+      fan-out-deadline: 8s
+
   retention:
     price-candle-days: 3650
+    # Demand-registered symbols nobody has asked about in this long are retired.
+    tracked-symbol-days: 90
   calendar:
     nyse-holidays:
       - 2026-01-01

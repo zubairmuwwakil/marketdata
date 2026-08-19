@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MarketLens — Quotes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --surface: #ffffff;
+      --surface-alt: #f8fafc;
+      --text: #0b1220;
+      --muted: #5f6b85;
+      --border: #e2e8f0;
+      --primary: #2563eb;
+      --primary-strong: #1d4ed8;
+      --accent: #14b8a6;
+      --accent-strong: #0ea5e9;
+      --danger: #ef4444;
+      --shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+      --glow: 0 0 0 1px rgba(37, 99, 235, 0.1), 0 20px 50px rgba(37, 99, 235, 0.18);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Plus Jakarta Sans", "Manrope", system-ui, sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 420px at 5% -10%, rgba(37, 99, 235, 0.22), transparent 60%),
+        radial-gradient(900px 420px at 95% 0%, rgba(20, 184, 166, 0.18), transparent 60%),
+        var(--bg);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -20% -10% auto -10%;
+      height: 60vh;
+      background: linear-gradient(120deg, rgba(37, 99, 235, 0.18), rgba(20, 184, 166, 0.14));
+      filter: blur(60px);
+      opacity: 0.6;
+      animation: drift 14s ease-in-out infinite;
+      z-index: -1;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(14px);
+      background: rgba(244, 246, 251, 0.92);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+    .logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary), var(--accent-strong));
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-weight: 800;
+      box-shadow: 0 12px 26px rgba(37, 99, 235, 0.22);
+      animation: pulse 4s ease-in-out infinite;
+    }
+    .nav-links { display: flex; gap: 14px; flex-wrap: wrap; }
+    .nav-links a {
+      text-decoration: none;
+      color: var(--muted);
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      transition: all 150ms ease;
+    }
+    .nav-links a:hover {
+      color: var(--text);
+      border-color: rgba(37, 99, 235, 0.25);
+      background: rgba(37, 99, 235, 0.08);
+    }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; display: grid; gap: 18px; }
+    .hero {
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(20, 184, 166, 0.08));
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      padding: 24px;
+      box-shadow: var(--shadow);
+    }
+    .hero h1 { margin: 0 0 8px; font-size: clamp(24px, 2.6vw, 34px); }
+    .hero p { margin: 0; color: var(--muted); line-height: 1.6; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px; box-shadow: var(--shadow); transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease; }
+    .card:hover { transform: translateY(-2px); box-shadow: var(--glow); border-color: rgba(37, 99, 235, 0.2); }
+    .button { border: none; border-radius: 12px; padding: 12px 16px; background: linear-gradient(135deg, var(--primary-strong), var(--primary)); color: #ffffff; font-weight: 700; cursor: pointer; font-family: "Manrope", sans-serif; position: relative; overflow: hidden; }
+    .button::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35), transparent 45%); opacity: 0; transition: opacity 200ms ease; }
+    .button:hover::after { opacity: 1; }
+    .button.secondary { background: #ffffff; color: var(--text); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+    th { color: var(--muted); font-size: 13px; }
+    td { font-family: "IBM Plex Mono", monospace; font-size: 13px; }
+    .status { margin-top: 10px; color: var(--muted); font-size: 13px; }
+    .status.error { color: var(--danger); }
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0,0,0); }
+      50% { transform: translate3d(40px, 10px, 0); }
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 12px 26px rgba(37, 99, 235, 0.22); }
+      50% { transform: scale(1.05); box-shadow: 0 18px 38px rgba(37, 99, 235, 0.32); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body::before, .logo { animation: none; }
+      .card, .button { transition: none; }
+    }
+    @media (max-width: 640px) { main { padding: 16px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="nav">
+      <div class="brand">
+        <div class="logo">ML</div>
+        MarketLens
+      </div>
+      <div class="nav-links">
+        <a href="/">Workspace</a>
+        <a href="/watchlist.html">Watchlist</a>
+        <a href="/quotes.html">Quotes</a>
+        <a href="/indicators.html">Indicators</a>
+        <a href="/runs.html">Runs</a>
+        <a href="/quality.html">Quality</a>
+        <a href="/actions.html">Actions</a>
+        <a href="/calendar.html">Calendar</a>
+        <a href="/keys.html">Keys</a>
+        <a href="/status.html">Status</a>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button id="access-key-btn" class="button secondary">Set API Key</button>
+        <a class="button secondary" href="/">Back to workspace</a>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section class="hero">
+      <h1>Quotes for any symbol</h1>
+      <p>
+        Latest <strong>daily closing</strong> prices &mdash; not real-time, and never presented as such.
+        Symbols do not need to be on the watchlist: anything asked for here is registered on demand and
+        kept warm by the nightly sweep. Every price says how old it is, what currency it is quoted in,
+        which provider supplied it, and whose credential paid for it.
+      </p>
+    </section>
+
+    <div class="card">
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+        <input id="symbols" type="text" value="AAPL,MSFT,NVDA"
+               placeholder="AAPL,MSFT,VFV.TO"
+               style="flex:1; min-width:240px; padding:12px 14px; border-radius:12px; border:1px solid var(--border); font-family:'IBM Plex Mono',monospace; font-size:13px;">
+        <button id="quote-btn" class="button">Get quotes</button>
+      </div>
+      <div class="status" id="status"></div>
+      <div id="table-wrap"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 6px;">Bring your own key <span style="font-weight:600; color:var(--muted); font-size:13px;">(optional)</span></h3>
+      <p style="margin:0 0 12px; color:var(--muted); font-size:14px; line-height:1.6;">
+        Supply your own upstream provider credential and MarketLens will spend it instead of its own,
+        so your data arrives under your licence and your quota. It is sent with the request, used, and
+        forgotten &mdash; <strong>never stored server-side</strong>. This box keeps it in your browser
+        session only. Format: <code>PROVIDER=key</code>, comma-separated.
+      </p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <input id="provider-key" type="password" placeholder="ALPHAVANTAGE=your-key"
+               style="flex:1; min-width:240px; padding:12px 14px; border-radius:12px; border:1px solid var(--border); font-family:'IBM Plex Mono',monospace; font-size:13px;">
+        <button id="save-key-btn" class="button secondary">Use for this session</button>
+        <button id="clear-key-btn" class="button secondary">Clear</button>
+      </div>
+      <div class="status" id="key-status"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+        <h3 style="margin:0;">Demand-registered symbols</h3>
+        <button id="tracked-btn" class="button secondary">Refresh</button>
+      </div>
+      <p style="margin:0 0 8px; color:var(--muted); font-size:13px;">
+        Symbols consumers have actually asked about, kept separate from the curated watchlist.
+        Symbols only &mdash; no consumer identity, no quantities.
+      </p>
+      <div id="tracked-wrap"></div>
+    </div>
+  </main>
+
+  <script src="/js/demo-mode.js"></script>
+  <script>
+    const statusEl = document.getElementById('status');
+    const keyStatusEl = document.getElementById('key-status');
+    const tableWrap = document.getElementById('table-wrap');
+    const trackedWrap = document.getElementById('tracked-wrap');
+    const accessKeyBtn = document.getElementById('access-key-btn');
+    let demoConfig = null;
+
+    let accessKey = window.marketLensDemo.getStoredApiKey();
+    const providerKey = () => sessionStorage.getItem('marketlens.providerKey') || '';
+
+    const api = (path, opts = {}) => fetch(path, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessKey ? { 'X-API-Key': accessKey } : {}),
+        ...(providerKey() ? { 'X-Provider-Key': providerKey() } : {})
+      },
+      ...opts
+    });
+
+    const setStatus = (msg, isError = false) => {
+      statusEl.textContent = msg || '';
+      statusEl.className = 'status' + (isError ? ' error' : '');
+    };
+
+    function promptForKey() {
+      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
+      if (next === null) return false;
+      accessKey = window.marketLensDemo.saveApiKey(next);
+      return true;
+    }
+
+    const badge = (status) => {
+      const colour = status === 'FRESH' ? 'var(--accent)' : status === 'STALE' ? '#d97706' : 'var(--danger)';
+      return `<span style="color:${colour}; font-weight:700;">${status}</span>`;
+    };
+
+    // A missing value renders as an em dash, never as 0 and never as a blank that
+    // could be mistaken for a real number.
+    const orDash = (v) => (v === null || v === undefined || v === '') ? '&mdash;' : v;
+
+    function renderQuotes(batch) {
+      const rows = batch.quotes.map(q => `
+        <tr>
+          <td>${q.symbol}</td>
+          <td>${badge(q.status)}</td>
+          <td>${orDash(q.close)}</td>
+          <td>${orDash(q.currency)}</td>
+          <td>${orDash(q.tradeDate)}</td>
+          <td>${q.staleTradingDays ? q.staleTradingDays + ' sessions' : (q.status === 'FRESH' ? 'current' : '&mdash;')}</td>
+          <td>${orDash(q.source)}</td>
+          <td>${orDash(q.keySource)}</td>
+          <td>${orDash(q.reason)}</td>
+        </tr>`).join('');
+
+      tableWrap.innerHTML = `
+        <table>
+          <thead><tr>
+            <th>Symbol</th><th>Status</th><th>Close</th><th>Currency</th>
+            <th>Trade date</th><th>Age</th><th>Source</th><th>Key</th><th>Reason</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+
+      let msg = `pricing: ${batch.pricing} · last closed session: ${batch.expectedSession}`;
+      if (batch.truncated && batch.truncated.length) {
+        msg += ` · dropped over the per-request cap: ${batch.truncated.join(', ')}`;
+      }
+      setStatus(msg);
+    }
+
+    async function loadQuotes() {
+      const symbols = document.getElementById('symbols').value.trim();
+      if (!symbols) { setStatus('Enter at least one symbol.', true); return; }
+      setStatus('Loading…');
+      try {
+        let res = await api('/api/v1/quotes?symbols=' + encodeURIComponent(symbols));
+        if (res.status === 401 || res.status === 403) {
+          if (!promptForKey()) { setStatus('An API key is required.', true); return; }
+          res = await api('/api/v1/quotes?symbols=' + encodeURIComponent(symbols));
+        }
+        if (!res.ok) { setStatus('Request failed: HTTP ' + res.status, true); return; }
+        renderQuotes(await res.json());
+      } catch (e) {
+        setStatus('Request failed: ' + e.message, true);
+      }
+    }
+
+    async function loadTracked() {
+      try {
+        const res = await api('/api/v1/quotes/tracked');
+        if (!res.ok) { trackedWrap.innerHTML = ''; return; }
+        const rows = (await res.json()).map(t => `
+          <tr>
+            <td>${t.symbol}</td><td>${t.assetClass}</td>
+            <td>${t.requestCount}</td><td>${orDash(t.lastStatus)}</td>
+          </tr>`).join('');
+        trackedWrap.innerHTML = rows
+          ? `<table><thead><tr><th>Symbol</th><th>Class</th><th>Requests</th><th>Last result</th></tr></thead><tbody>${rows}</tbody></table>`
+          : '<div class="status">Nothing requested yet.</div>';
+      } catch (e) {
+        trackedWrap.innerHTML = '';
+      }
+    }
+
+    function refreshKeyStatus() {
+      keyStatusEl.textContent = providerKey()
+        ? 'Using your key for this browser session. Not stored on the server.'
+        : 'No provider key set — quotes use this service’s own credentials or a keyless source.';
+    }
+
+    document.getElementById('quote-btn').addEventListener('click', loadQuotes);
+    document.getElementById('tracked-btn').addEventListener('click', loadTracked);
+    document.getElementById('save-key-btn').addEventListener('click', () => {
+      const el = document.getElementById('provider-key');
+      if (el.value.trim()) sessionStorage.setItem('marketlens.providerKey', el.value.trim());
+      el.value = '';
+      refreshKeyStatus();
+    });
+    document.getElementById('clear-key-btn').addEventListener('click', () => {
+      sessionStorage.removeItem('marketlens.providerKey');
+      refreshKeyStatus();
+    });
+    accessKeyBtn.addEventListener('click', () => { if (promptForKey()) loadQuotes(); });
+
+    (async () => {
+      demoConfig = await window.marketLensDemo.loadDemoConfig();
+      accessKey = window.marketLensDemo.ensureDemoKey(demoConfig, accessKey);
+      refreshKeyStatus();
+      loadQuotes();
+      loadTracked();
+    })();
+  </script>
+</body>
+</html>

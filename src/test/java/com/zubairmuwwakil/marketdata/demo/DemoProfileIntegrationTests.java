@@ -52,6 +52,48 @@ class DemoProfileIntegrationTests {
     }
 
     @Test
+    void quotePathWorksInDemoModeWithNoPostgresAndNoProviderKey() throws Exception {
+        // Demo mode is a product surface, not a test convenience: `./mvnw -Pdemo`
+        // is how someone sees this service in thirty seconds. A new capability that
+        // only works with a real database and a real provider key would regress
+        // the standalone story while improving the integration one.
+        String featured = datasetFactory.dataset().featuredSymbol();
+
+        mockMvc.perform(get("/api/v1/quotes")
+                        .header("X-API-Key", "change-me-admin")
+                        .queryParam("symbols", featured))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pricing").value("daily-close"))
+                .andExpect(jsonPath("$.expectedSession").isNotEmpty())
+                .andExpect(jsonPath("$.quotes[0].symbol").value(featured))
+                .andExpect(jsonPath("$.quotes[0].currency").value("USD"))
+                .andExpect(jsonPath("$.quotes[0].source").value("DEMO"));
+    }
+
+    @Test
+    void anUnknownSymbolFailsClosedWithANullPriceRatherThanAZero() throws Exception {
+        mockMvc.perform(get("/api/v1/quotes")
+                        .header("X-API-Key", "change-me-admin")
+                        .queryParam("symbols", "ZZZZNOTREAL"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quotes[0].status").value("UNAVAILABLE"))
+                .andExpect(jsonPath("$.quotes[0].close").doesNotExist())
+                .andExpect(jsonPath("$.quotes[0].reason").value("no_data"));
+    }
+
+    @Test
+    void requestedSymbolsAreDemandRegisteredAndVisible() throws Exception {
+        mockMvc.perform(get("/api/v1/quotes")
+                        .header("X-API-Key", "change-me-admin")
+                        .queryParam("symbols", "AAPL"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/quotes/tracked").header("X-API-Key", "change-me-admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.symbol == 'AAPL')]").isNotEmpty());
+    }
+
+    @Test
     void seededQualityReportExposesIntentionalGap() throws Exception {
         DemoDatasetFactory.DemoDataset dataset = datasetFactory.dataset();
 

@@ -1,7 +1,7 @@
 package com.zubairmuwwakil.marketdata.controller;
 
 import com.zubairmuwwakil.marketdata.client.AlphaVantageClient;
-import com.zubairmuwwakil.marketdata.service.ingestion.ApiKeyStore;
+import com.zubairmuwwakil.marketdata.service.ingestion.ProviderKeyStore;
 import com.zubairmuwwakil.marketdata.service.ingestion.QuotaService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,11 +12,11 @@ import java.util.Map;
 @RequestMapping("/api/v1/admin")
 public class ApiKeyController {
 
-    private final ApiKeyStore store;
+    private final ProviderKeyStore store;
     private final QuotaService quotaService;
     private final AlphaVantageClient alphaVantageClient;
 
-    public ApiKeyController(ApiKeyStore store, QuotaService quotaService, AlphaVantageClient alphaVantageClient) {
+    public ApiKeyController(ProviderKeyStore store, QuotaService quotaService, AlphaVantageClient alphaVantageClient) {
         this.store = store;
         this.quotaService = quotaService;
         this.alphaVantageClient = alphaVantageClient;

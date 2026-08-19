@@ -5,6 +5,8 @@ MarketLens is a Spring Boot market data pipeline and analytics service for equit
 ## What It Does
 
 - Ingests daily and backfilled market data for a configurable watchlist.
+- Serves latest daily closes for **any** symbol set, not just the watchlist, with explicit staleness and currency (`GET /api/v1/quotes`).
+- Accepts bring-your-own-key credentials per request, so a caller's data is fetched under the caller's own licence and quota.
 - Stores normalized OHLCV candles with Flyway-managed PostgreSQL migrations.
 - Calculates RSI, EMA, and MACD technical indicators.
 - Tracks pipeline runs, retries, provider quota usage, and malformed rows.
@@ -22,7 +24,7 @@ MarketLens is a Spring Boot market data pipeline and analytics service for equit
 - Spring Web, Spring Data JPA, Spring Security, Actuator
 - PostgreSQL 16 locally via Docker Compose
 - Flyway migrations
-- Alpha Vantage market data provider
+- Alpha Vantage and Yahoo market data providers, resolved by asset class and capability
 - Springdoc OpenAPI
 - Micrometer, Prometheus, OTLP tracing
 - Caffeine cache
@@ -334,3 +336,85 @@ src/main/resources
   db/migration/    Flyway SQL migrations
   static/          Static dashboard pages
 ```
+
+## Quotes for an arbitrary symbol set
+
+Ingestion serves a fixed watchlist on a schedule. A consumer tracking someone's
+holdings has a **dynamic** symbol set, so `/api/v1/quotes` answers "what are these
+N symbols worth as of the latest close" for symbols nobody curated.
+
+```bash
+curl -H "X-API-Key: $MARKETDATA_USER_KEY" \
+  "http://localhost:8080/api/v1/quotes?symbols=AAPL,VFV.TO,ZZZZ"
+```
+
+```json
+{
+  "pricing": "daily-close",
+  "expectedSession": "2026-08-18",
+  "quotes": [
+    {"symbol":"AAPL","status":"FRESH","close":310.03,"currency":"USD",
+     "tradeDate":"2026-08-18","source":"YAHOO","keySource":"NONE","staleTradingDays":0},
+    {"symbol":"VFV.TO","status":"FRESH","close":189.70,"currency":"CAD",
+     "tradeDate":"2026-08-18","source":"YAHOO","keySource":"NONE","staleTradingDays":0},
+    {"symbol":"ZZZZ","status":"UNAVAILABLE","close":null,"currency":null,"reason":"no_data"}
+  ],
+  "truncated": []
+}
+```
+
+**Daily closing prices — not real-time.** The API says so in its own payload
+rather than leaving it to documentation.
+
+Three things this contract guarantees:
+
+- **`status` never lies.** `FRESH` means priced as of `expectedSession`. `STALE` is
+  a real last-known close with its age in `staleTradingDays`. `UNAVAILABLE` has a
+  **null** price — never interpolated, never carried from another symbol, never a
+  zero. A consumer can always tell "we don't know" from "it's worth nothing".
+- **Prices carry their currency.** `VFV.TO` is CAD and `AAPL` is USD; a total that
+  adds them is fabricated. This service returns each price in its own currency and
+  does not convert. A null currency means no provider reported one, and the figure
+  must not be summed with any other.
+- **A failed refresh changes nothing.** Cached last-known prices are served and
+  labelled rather than blanked, so valuation never hard-depends on a live fetch.
+
+Symbols asked for here are demand-registered in `tracked_symbol` and kept warm by
+a nightly sweep. That table holds **symbols only** — no consumer identity, no
+quantities.
+
+## Bring your own key
+
+Supply your own upstream provider credential and MarketLens spends it instead of
+its own:
+
+```bash
+curl -H "X-API-Key: $MARKETDATA_USER_KEY" \
+     -H "X-Provider-Key: ALPHAVANTAGE=your-key" \
+     "http://localhost:8080/api/v1/quotes?symbols=AAPL"
+```
+
+The key is used for that request and **never stored or logged**. Credential
+storage belongs to the consumer; MarketLens has no encryption at rest and
+deliberately does not become a credential holder.
+
+Each quote reports `keySource` — `USER` (your key), `APP` (this service's key), or
+`NONE` (a keyless source). If your key fails or exhausts its quota, pricing falls
+back and says so; it will never claim your key worked when it didn't.
+
+Note the two distinct key concepts: **`X-API-Key`** answers *may you call
+MarketLens*; **`X-Provider-Key`** answers *whose upstream credential do we spend*.
+
+## Providers
+
+Routing is by purpose, not one global default:
+
+| Path | Symbol set | Provider | Why |
+|---|---|---|---|
+| Watchlist ingestion | fixed, curated | Alpha Vantage | Sanctioned; 25 calls/day is ample for a fixed list |
+| Quote path | dynamic, arbitrary | Yahoo | Alpha Vantage's free tier cannot serve arbitrary symbols |
+
+**Both are daily closes.** The split is sanction and quota, not latency — Alpha
+Vantage's free tier is not real-time either. Providers are resolved through
+`MarketDataProviderRegistry` by `(asset class, capability)`, so swapping one is a
+config change plus one class. See `docs/decisions/0003-dynamic-quote-path.md`.

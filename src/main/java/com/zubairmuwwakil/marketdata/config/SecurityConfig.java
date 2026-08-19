@@ -4,6 +4,7 @@ import com.zubairmuwwakil.marketdata.security.ApiKeyAuthFilter;
 import com.zubairmuwwakil.marketdata.security.ApiAuthenticationEntryPoint;
 import com.zubairmuwwakil.marketdata.security.ApiProblemResponseWriter;
 import com.zubairmuwwakil.marketdata.security.ApiKeyService;
+import com.zubairmuwwakil.marketdata.security.ProviderKeyFilter;
 import com.zubairmuwwakil.marketdata.security.RateLimitFilter;
 import com.zubairmuwwakil.marketdata.service.ingestion.QuotaService;
 import org.springframework.context.annotation.Bean;
@@ -61,7 +62,10 @@ public class SecurityConfig {
                 .addFilterAfter(
                         new RateLimitFilter(rateLimitProperties, quotaService, problemResponseWriter),
                         ApiKeyAuthFilter.class
-                );
+                )
+                // After authentication on purpose: an unauthenticated caller must not
+                // be able to get a provider credential spent on its behalf.
+                .addFilterAfter(new ProviderKeyFilter(), RateLimitFilter.class);
 
         return http.build();
     }

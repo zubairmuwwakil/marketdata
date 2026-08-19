@@ -1,5 +1,7 @@
 package com.zubairmuwwakil.marketdata.service.ingestion;
 
+import com.zubairmuwwakil.marketdata.model.AssetClass;
+import com.zubairmuwwakil.marketdata.model.dto.CandleSeries;
 import com.zubairmuwwakil.marketdata.model.dto.DailyCandle;
 import com.zubairmuwwakil.marketdata.model.entity.PipelineRun;
 import com.zubairmuwwakil.marketdata.model.entity.PipelineRunType;
@@ -23,7 +25,7 @@ public class IngestionService {
 
     private record ProcessOutcome(boolean success, int retriesUsed) {}
 
-    private final MarketDataProvider marketDataProvider;
+    private final MarketDataProviderRegistry providerRegistry;
     private final WatchlistSymbolRepository watchlistRepo;
     private final QuotaService quotaService;
     private final PriceCandleUpsertRepository candleUpsertRepo;
@@ -33,7 +35,7 @@ public class IngestionService {
     private final ObjectMapper objectMapper;
 
     public IngestionService(
-            MarketDataProvider marketDataProvider,
+            MarketDataProviderRegistry providerRegistry,
             WatchlistSymbolRepository watchlistRepo,
             QuotaService quotaService,
             PriceCandleUpsertRepository candleUpsertRepo,
@@ -42,7 +44,7 @@ public class IngestionService {
             IngestionQuarantineRepository quarantineRepository,
             ObjectMapper objectMapper
     ) {
-        this.marketDataProvider = marketDataProvider;
+        this.providerRegistry = providerRegistry;
         this.watchlistRepo = watchlistRepo;
         this.quotaService = quotaService;
         this.candleUpsertRepo = candleUpsertRepo;
@@ -97,7 +99,7 @@ public class IngestionService {
 
         if (remainingQuota == 0 && expected > 0) {
             run.setStatus(PipelineStatus.FAILED);
-            run.setErrorMessage("Daily Alpha Vantage quota exhausted.");
+            run.setErrorMessage("Daily " + QuotaService.PROVIDER + " quota exhausted.");
             run.setFinishedAt(Instant.now());
             return runRepo.save(run);
         }
@@ -251,12 +253,13 @@ public class IngestionService {
     protected ProcessOutcome processSymbol(String symbol, LocalDate from, LocalDate to, Long runId) {
         quotaService.consumeOneCall();
 
-        List<DailyCandle> candles = marketDataProvider.fetchDailyCandles(symbol, from, to);
+        MarketDataProvider provider = providerRegistry.ingestionProvider(AssetClass.EQUITY);
+        CandleSeries series = provider.fetchDailySeries(symbol, from, to);
         List<DailyCandle> valid = new java.util.ArrayList<>();
-        for (DailyCandle candle : candles) {
+        for (DailyCandle candle : series.candles()) {
             String reason = validateCandle(candle);
             if (reason != null) {
-                quarantineRepository.save(symbol, candle == null ? null : candle.tradeDate(), reason, payloadFor(candle), marketDataProvider.sourceName(), runId);
+                quarantineRepository.save(symbol, candle == null ? null : candle.tradeDate(), reason, payloadFor(candle), provider.sourceName(), runId);
                 continue;
             }
             valid.add(candle);
@@ -266,7 +269,8 @@ public class IngestionService {
             symbol,
             valid,
             false,
-            marketDataProvider.sourceName()
+            provider.sourceName(),
+            series.currency()
         );
 
         // Always run indicators; service is idempotent and will fill gaps
