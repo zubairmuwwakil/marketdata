@@ -1,8 +1,36 @@
 # MarketLens
 
-MarketLens is a Spring Boot market data pipeline and analytics service for equities. It ingests Alpha Vantage daily price data, stores it in PostgreSQL, calculates indicators, tracks ingestion runs, exposes API-key-protected REST endpoints, and includes static operational dashboards for local or demo use.
+**MarketLens** is an enterprise-grade Spring Boot market data pipeline and analytics microservice for equities and crypto. It ingests market data, stores normalized time-series candles in PostgreSQL, computes technical indicators, tracks pipeline runs, exposes API-key-protected REST endpoints, and includes static operational dashboards for production or demo use.
 
-## What It Does
+- **Stack:** Java 21 · Spring Boot 4 · PostgreSQL 16 · Flyway · Alpha Vantage & Yahoo · Micrometer / Prometheus / OTLP
+- **Standing Invariant:** Daily / latest closing pricing (never claims real-time unless infrastructure changes).
+
+---
+
+## 1. Standalone Product Capabilities
+
+MarketLens functions independently as a standalone market data and analytics platform for third-party developers and analysts:
+
+- **Idempotent Ingestion & Row-Level Quarantine**: Safely backfills historical data with unique idempotency keys. Corrupt or malformed provider rows are isolated in `ingestion_quarantine` with reasons and payloads, allowing valid rows in the batch to commit without breaking the run.
+- **Dynamic Quotes Endpoint (`GET /api/v1/quotes`)**: Serves daily closes for any arbitrary symbol set, cache-first, with explicit staleness and currency metrics.
+- **Technical Indicators**: Calculates mathematical RSI (14-period default), EMA, and MACD indicators on demand.
+- **Corporate Actions & Split Adjustments**: Maintains corporate action events and returns split-adjusted historical pricing.
+- **NYSE Trading Calendar**: Full calendar awareness of trading days, weekends, holidays, and early-close sessions.
+- **Data Quality Audits**: Automatic detection of data gaps, duplicate timestamps, and price outliers.
+- **Bring-Your-Own-Key (BYOK)**: Supports `X-Provider-Key: PROVIDER=key` headers, enabling callers to fetch data against their own upstream vendor quotas without MarketLens storing credentials.
+- **Zero-Dependency Demo Mode**: Run `./mvnw -Pdemo spring-boot:run` to launch with an in-memory H2 database, seeded symbols (`MSFT`, `AAPL`, `NVDA`, `SPY`), and operational UI dashboards (`/`, `/indicators.html`, `/quality.html`, `/runs.html`).
+
+---
+
+## 2. Ecosystem Unification (Optional)
+
+MarketLens serves as the asset valuation engine for **Inunity** ([`inunity.ca`](https://inunity.ca)):
+
+- **Separation of Concerns**: MarketLens answers *"what is this security worth and how has it behaved"* without knowing user identities, account balances, or portfolio totals.
+- **BYOK Upstream Spend**: Inunity passes encrypted user-configured provider keys over the `X-Provider-Key` header so users spend their own Alpha Vantage / Questrade quotas.
+- **Resilient Fallback**: If MarketLens is unreachable or a symbol is unlisted, Inunity safely retains previous cached valuations rather than failing portfolio calculations.
+
+---
 
 - Ingests daily and backfilled market data for a configurable watchlist.
 - Serves latest daily closes for **any** symbol set, not just the watchlist, with explicit staleness and currency (`GET /api/v1/quotes`).
