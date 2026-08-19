@@ -18,6 +18,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
@@ -65,7 +66,8 @@ public class YahooDailyProvider implements MarketDataProvider, LatestQuoteProvid
 
     @Override
     public List<DailyCandle> fetchDailyCandles(String symbol, LocalDate from, LocalDate to) {
-        return client.dailyChart(symbol, from, to)
+        String querySymbol = normalizeSymbol(symbol);
+        return client.dailyChart(querySymbol, from, to)
                 .map(result -> parse(symbol, result).candles())
                 .orElseGet(List::of);
     }
@@ -74,7 +76,8 @@ public class YahooDailyProvider implements MarketDataProvider, LatestQuoteProvid
      *  not thrown away and re-fetched. */
     @Override
     public CandleSeries fetchDailySeries(String symbol, LocalDate from, LocalDate to) {
-        return client.dailyChart(symbol, from, to)
+        String querySymbol = normalizeSymbol(symbol);
+        return client.dailyChart(querySymbol, from, to)
                 .map(result -> {
                     ParsedSeries parsed = parse(symbol, result);
                     return new CandleSeries(symbol, parsed.currency(), SOURCE_NAME, parsed.candles());
@@ -86,8 +89,9 @@ public class YahooDailyProvider implements MarketDataProvider, LatestQuoteProvid
     public Optional<QuotedCandle> fetchLatestClose(String symbol) {
         LocalDate to = LocalDate.now(ZoneId.of("America/New_York"));
         LocalDate from = to.minusDays(LATEST_LOOKBACK_DAYS);
+        String querySymbol = normalizeSymbol(symbol);
 
-        return client.dailyChart(symbol, from, to).flatMap(result -> {
+        return client.dailyChart(querySymbol, from, to).flatMap(result -> {
             ParsedSeries series = parse(symbol, result);
             if (series.candles().isEmpty()) {
                 return Optional.empty();
@@ -95,6 +99,17 @@ public class YahooDailyProvider implements MarketDataProvider, LatestQuoteProvid
             DailyCandle latest = series.candles().get(series.candles().size() - 1);
             return Optional.of(new QuotedCandle(symbol, latest, series.currency(), SOURCE_NAME));
         });
+    }
+
+    public static String normalizeSymbol(String symbol) {
+        if (symbol == null) return "";
+        String s = symbol.trim().toUpperCase(Locale.ROOT);
+        if (s.startsWith("TSE:") || s.startsWith("TSX:")) {
+            s = s.substring(4) + ".TO";
+        } else if (s.endsWith("-TO") || s.endsWith(":CA") || s.endsWith(":TO")) {
+            s = s.replaceAll("(-TO|:CA|:TO)$", ".TO");
+        }
+        return s;
     }
 
     @Override

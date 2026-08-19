@@ -12,7 +12,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Keeps demand-registered symbols warm so "cache last-known" is a real guarantee
@@ -54,21 +57,36 @@ public class QuoteRefreshJob {
             return;
         }
 
+        Map<AssetClass, List<String>> byAssetClass = new LinkedHashMap<>();
+        for (TrackedSymbolRepository.TrackedSymbol symbol : tracked) {
+            AssetClass assetClass = AssetClass.EQUITY;
+            if (symbol.assetClass() != null) {
+                try {
+                    assetClass = AssetClass.valueOf(symbol.assetClass().toUpperCase());
+                } catch (IllegalArgumentException ignored) {}
+            }
+            byAssetClass.computeIfAbsent(assetClass, k -> new ArrayList<>()).add(symbol.symbol());
+        }
+
         int fresh = 0;
         int unavailable = 0;
-        for (int start = 0; start < tracked.size(); start += maxSymbols) {
-            List<String> batch = tracked.subList(start, Math.min(start + maxSymbols, tracked.size()))
-                    .stream().map(TrackedSymbolRepository.TrackedSymbol::symbol).toList();
-            QuoteBatch result = quoteService.quote(batch, AssetClass.EQUITY);
-            for (var quote : result.quotes()) {
-                if (quote.status() == QuoteStatus.FRESH) fresh++;
-                if (quote.status() == QuoteStatus.UNAVAILABLE) unavailable++;
+
+        for (var entry : byAssetClass.entrySet()) {
+            AssetClass assetClass = entry.getKey();
+            List<String> symbols = entry.getValue();
+
+            for (int start = 0; start < symbols.size(); start += maxSymbols) {
+                List<String> batch = symbols.subList(start, Math.min(start + maxSymbols, symbols.size()));
+                QuoteBatch result = quoteService.quote(batch, assetClass);
+                for (var quote : result.quotes()) {
+                    if (quote.status() == QuoteStatus.FRESH) fresh++;
+                    if (quote.status() == QuoteStatus.UNAVAILABLE) unavailable++;
+                }
             }
         }
 
-        // Reported honestly rather than logged as a flat success: a sweep that warms
-        // nothing is a real outage signal, not a quiet no-op.
-        log.info("[quote-sweep] {} symbols swept, {} fresh, {} unavailable", tracked.size(), fresh, unavailable);
+        log.info("[quote-sweep] {} symbols swept across {} asset classes, {} fresh, {} unavailable",
+                tracked.size(), byAssetClass.size(), fresh, unavailable);
         if (fresh == 0) {
             log.warn("[quote-sweep] resolved nothing — existing prices left untouched, consumers will see STALE");
         }

@@ -66,7 +66,7 @@ public class QuestradeClient {
      */
     public Optional<QuestradeSymbol> searchSymbol(String symbol) {
         if (symbol == null || symbol.isBlank()) return Optional.empty();
-        String normalized = symbol.trim().toUpperCase(Locale.ROOT);
+        String normalized = normalizeSymbol(symbol);
         QuestradeSymbol cached = symbolCache.get(normalized);
         if (cached != null) {
             return Optional.of(cached);
@@ -74,26 +74,47 @@ public class QuestradeClient {
 
         ResolvedAuth auth = resolveAuth();
         return executeWithResilience(() -> {
-            String body = buildClient(auth.baseUrl()).get()
-                    .uri(builder -> builder.path("/v1/symbols/search").queryParam("prefix", normalized).build())
-                    .header("Authorization", "Bearer " + auth.token())
-                    .retrieve()
-                    .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
-                        throw new ExternalServiceException("Questrade server error: HTTP " + res.getStatusCode(), true);
-                    })
-                    .onStatus(status -> status.value() == 404, (req, res) -> {
-                        throw new SymbolNotFoundException(symbol);
-                    })
-                    .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
-                        boolean retryable = res.getStatusCode().value() == 429;
-                        throw new ExternalServiceException("Questrade client error: HTTP " + res.getStatusCode(), retryable);
-                    })
-                    .body(String.class);
-
-            Optional<QuestradeSymbol> result = parseSymbolSearchResult(body, normalized);
-            result.ifPresent(s -> symbolCache.put(normalized, s));
+            Optional<QuestradeSymbol> result = querySymbolSearch(auth, normalized);
+            if (result.isEmpty() && normalized.endsWith(".TO")) {
+                result = querySymbolSearch(auth, normalized.substring(0, normalized.length() - 3));
+            }
+            result.ifPresent(s -> {
+                symbolCache.put(normalized, s);
+                symbolCache.put(symbol.trim().toUpperCase(Locale.ROOT), s);
+            });
             return result;
         });
+    }
+
+    private Optional<QuestradeSymbol> querySymbolSearch(ResolvedAuth auth, String queryPrefix) {
+        String body = buildClient(auth.baseUrl()).get()
+                .uri(builder -> builder.path("/v1/symbols/search").queryParam("prefix", queryPrefix).build())
+                .header("Authorization", "Bearer " + auth.token())
+                .retrieve()
+                .onStatus(HttpStatusCode::is5xxServerError, (req, res) -> {
+                    throw new ExternalServiceException("Questrade server error: HTTP " + res.getStatusCode(), true);
+                })
+                .onStatus(status -> status.value() == 404, (req, res) -> {
+                    throw new SymbolNotFoundException(queryPrefix);
+                })
+                .onStatus(HttpStatusCode::is4xxClientError, (req, res) -> {
+                    boolean retryable = res.getStatusCode().value() == 429;
+                    throw new ExternalServiceException("Questrade client error: HTTP " + res.getStatusCode(), retryable);
+                })
+                .body(String.class);
+
+        return parseSymbolSearchResult(body, queryPrefix);
+    }
+
+    public static String normalizeSymbol(String symbol) {
+        if (symbol == null) return "";
+        String s = symbol.trim().toUpperCase(Locale.ROOT);
+        if (s.startsWith("TSE:") || s.startsWith("TSX:")) {
+            s = s.substring(4) + ".TO";
+        } else if (s.endsWith("-TO") || s.endsWith(":CA") || s.endsWith(":TO")) {
+            s = s.replaceAll("(-TO|:CA|:TO)$", ".TO");
+        }
+        return s;
     }
 
     /**
