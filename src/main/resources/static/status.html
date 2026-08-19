@@ -69,24 +69,25 @@
     let demoConfig = null;
 
     let accessKey = window.marketLensDemo.getStoredApiKey();
-    const api = (path, opts = {}) => fetch(path, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessKey ? { 'X-API-Key': accessKey } : {})
-      },
-      ...opts
-    });
-
-    const promptKey = () => {
-      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
-      if (next === null) return false;
-      accessKey = window.marketLensDemo.saveApiKey(next);
-      return true;
+    const api = (path, opts = {}) => {
+      const currentKey = accessKey || window.marketLensDemo.getStoredApiKey();
+      return fetch(path, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentKey ? { 'X-API-Key': currentKey } : {})
+        },
+        ...opts
+      });
     };
 
     const setStatus = (msg) => statusEl.textContent = msg || '';
 
-    accessKeyBtn.addEventListener('click', promptKey);
+    window.marketLensDemo.attachKeyButton(accessKeyBtn, (newKey) => {
+      accessKey = newKey;
+      refreshHealth();
+      refreshLatestRun();
+      refreshQuota();
+    });
 
     async function refreshHealth() {
       try {
@@ -116,7 +117,6 @@
     }
 
     async function refreshQuota() {
-      if (!accessKey && !promptKey()) return;
       quotaEl.textContent = 'Loading quota...';
       try {
         const res = await api('/api/v1/admin/quota');

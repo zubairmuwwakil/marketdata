@@ -180,43 +180,37 @@
     let demoConfig = null;
 
     let accessKey = window.marketLensDemo.getStoredApiKey();
-    const api = (path, opts = {}) => fetch(path, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessKey ? { 'X-API-Key': accessKey } : {})
-      },
-      ...opts
-    });
+    const api = (path, opts = {}) => {
+      const currentKey = accessKey || window.marketLensDemo.getStoredApiKey();
+      return fetch(path, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentKey ? { 'X-API-Key': currentKey } : {})
+        },
+        ...opts
+      });
+    };
 
     const setStatus = (msg, isError=false) => {
       statusEl.textContent = msg || '';
       statusEl.className = 'status' + (isError ? ' error' : '');
     };
 
-    function promptForKey() {
-      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
-      if (next === null) return false;
-      accessKey = window.marketLensDemo.saveApiKey(next);
-      return true;
-    }
-
-    accessKeyBtn.addEventListener('click', () => {
-      promptForKey();
+    window.marketLensDemo.attachKeyButton(accessKeyBtn, (newKey) => {
+      accessKey = newKey;
+      loadSummary();
     });
 
-    async function loadSummary(retry = true) {
-      if (!accessKey) {
-        setStatus('Set MarketLens API Key (default: change-me-user) to load data.', true);
-        return;
-      }
+    async function loadSummary() {
       setStatus('Loading...');
       refreshBtn.disabled = true;
       toggleBtn.disabled = true;
       try {
         const res = await api('/api/v1/market/summary?active=' + (!showInactive));
-        if (res.status === 401 && retry) {
-          const ok = promptForKey();
-          if (ok) return await loadSummary(false);
+        if (res.status === 401 || res.status === 403) {
+          setStatus('Authentication failed (HTTP ' + res.status + '). Click "Set API Key" above to configure your MarketLens key.', true);
+          tableWrap.innerHTML = '';
+          return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();

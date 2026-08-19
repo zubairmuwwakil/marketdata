@@ -63,6 +63,15 @@ public class MarketDataProviderRegistry {
         return List.copyOf(quoteProviders.keySet());
     }
 
+    /** Find a quote provider by name if it supports the asset class. */
+    public Optional<LatestQuoteProvider> findQuoteProvider(String sourceName, AssetClass assetClass) {
+        LatestQuoteProvider provider = quoteProviders.get(normalize(sourceName));
+        if (provider != null && provider.supportedAssetClasses().contains(assetClass)) {
+            return Optional.of(provider);
+        }
+        return Optional.empty();
+    }
+
     /**
      * Configured name first; otherwise, if exactly one registered provider covers
      * the asset class, use it. The fallback is what keeps the demo profile working
@@ -99,16 +108,14 @@ public class MarketDataProviderRegistry {
     private String configuredIngestion(AssetClass assetClass) {
         return switch (assetClass) {
             case EQUITY -> properties.getIngestionEquity();
-            // Crypto ingestion routing arrives with the crypto providers; until then
-            // resolution falls through to whatever single provider covers it.
-            case CRYPTO -> null;
+            case CRYPTO -> properties.getIngestionCrypto();
         };
     }
 
     private String configuredQuotes(AssetClass assetClass) {
         return switch (assetClass) {
             case EQUITY -> properties.getQuotesEquity();
-            case CRYPTO -> null;
+            case CRYPTO -> properties.getQuotesCrypto();
         };
     }
 

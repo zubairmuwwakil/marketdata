@@ -430,24 +430,24 @@
         </div>
         <p class="panel-sub">Connect your data source once, then run ingestion whenever you need a fresh backfill.</p>
         <div class="card" style="margin:12px 0; padding:12px 14px; background:var(--surface-alt);">
-          <strong>Enter a MarketLens API Key</strong>
-          <div class="status" style="margin-top:6px;">Default key: <span style="font-family: 'IBM Plex Mono', monospace;">change-me-user</span>.</div>
+          <strong>MarketLens Access & Upstream Provider Keys</strong>
+          <div class="status" style="margin-top:6px;">Default demo access key: <span style="font-family: 'IBM Plex Mono', monospace;">change-me-user</span>. Add an Alpha Vantage key to fetch upstream market data.</div>
         </div>
         <div class="grid">
           <div>
-            <label for="marketlens-key">MarketLens API Key</label>
-            <input id="marketlens-key" placeholder="Paste MarketLens key" autocomplete="off">
+            <label for="marketlens-key">MarketLens Gateway Key (<code>X-API-Key</code>)</label>
+            <input id="marketlens-key" placeholder="e.g. change-me-user" autocomplete="off">
           </div>
           <div class="inline-actions" style="align-items:flex-end;">
-            <button id="save-marketlens-btn" class="button secondary">Save MarketLens Key</button>
+            <button id="save-marketlens-btn" class="button secondary">Save Gateway Key</button>
             <button id="use-default-marketlens-btn" class="button secondary" type="button">Use default key</button>
           </div>
           <div>
-            <label for="api-key">Alpha Vantage API Key</label>
-            <input id="api-key" placeholder="Paste API key" autocomplete="off">
+            <label for="api-key">Alpha Vantage Provider Key (BYOK)</label>
+            <input id="api-key" placeholder="Paste Alpha Vantage API key" autocomplete="off">
           </div>
           <div class="inline-actions" style="align-items:flex-end;">
-            <button id="save-key-btn" class="button">Save API Key</button>
+            <button id="save-key-btn" class="button">Save Alpha Vantage Key</button>
           </div>
         </div>
         <div style="display:flex; align-items:center; gap:10px; margin:12px 0; flex-wrap:wrap;">
@@ -548,16 +548,19 @@
       marketlensKeyInput.value = accessKey;
     }
 
-    const promptForKey = () => {
-      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
-      if (next === null) return false;
-      accessKey = window.marketLensDemo.saveApiKey(next);
-      return true;
+    const onKeyUpdated = (newKey) => {
+      accessKey = newKey;
+      if (marketlensKeyInput) {
+        marketlensKeyInput.value = accessKey;
+      }
+      updateStatus();
+      refreshQuota();
     };
 
+    window.marketLensDemo.attachKeyButton(accessKeyBtn, onKeyUpdated);
+
     const ensureAccessKey = (statusEl) => {
-      if (accessKey) return true;
-      if (!promptForKey()) return false;
+      accessKey = window.marketLensDemo.getStoredApiKey();
       if (!accessKey) {
         if (statusEl) {
           setStatus(statusEl, 'Set MarketLens API Key first (default: change-me-user).', true);
@@ -567,18 +570,15 @@
       return true;
     };
 
-    const api = async (path, opts = {}, retry = true) => {
+    const api = async (path, opts = {}) => {
+      const currentKey = accessKey || window.marketLensDemo.getStoredApiKey();
       const res = await fetch(path, {
         headers: {
           'Content-Type': 'application/json',
-          ...(accessKey ? { 'X-API-Key': accessKey } : {})
+          ...(currentKey ? { 'X-API-Key': currentKey } : {})
         },
         ...opts
       });
-      if (res.status === 401 && retry) {
-        const ok = promptForKey();
-        if (ok) return api(path, opts, false);
-      }
       return res;
     };
 
@@ -612,30 +612,28 @@
     let watchlist = [];
     let summaries = [];
 
-    accessKeyBtn.addEventListener('click', () => {
-      promptForKey();
-    });
-
     saveMarketlensBtn.addEventListener('click', () => {
       accessKey = window.marketLensDemo.saveApiKey(marketlensKeyInput.value || '');
-      if (accessKey) {
-        setStatus(keyStatus, 'MarketLens API key saved. Validating...');
-        api('/api/v1/health').then(res => {
-          if (res.ok) {
-            setStatus(keyStatus, 'MarketLens API key validated.');
-          } else {
-            setStatus(keyStatus, 'MarketLens API key is invalid. Use change-me-user or update server config.', true);
-          }
-        });
-      } else {
-        setStatus(keyStatus, 'MarketLens API key cleared.');
-      }
+      if (marketlensKeyInput) marketlensKeyInput.value = accessKey;
+      setStatus(keyStatus, 'MarketLens API key saved. Validating...');
+      api('/api/v1/health').then(res => {
+        if (res.ok) {
+          setStatus(keyStatus, 'MarketLens API key validated.');
+          updateStatus();
+          refreshQuota();
+        } else {
+          setStatus(keyStatus, 'MarketLens API key is invalid. Use change-me-user or update server config.', true);
+        }
+      });
     });
 
     useDefaultMarketlensBtn.addEventListener('click', () => {
-      accessKey = window.marketLensDemo.saveApiKey((demoConfig && demoConfig.defaultApiKey) || 'change-me-user');
+      const def = (demoConfig && demoConfig.defaultApiKey) || window.marketLensDemo.DEFAULT_KEY;
+      accessKey = window.marketLensDemo.saveApiKey(def);
       marketlensKeyInput.value = accessKey;
       setStatus(keyStatus, 'Default MarketLens API key applied.');
+      updateStatus();
+      refreshQuota();
     });
 
     const renderWatchlist = () => {

@@ -167,8 +167,12 @@
 
     <div class="card">
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+        <select id="asset-class" style="padding:12px 14px; border-radius:12px; border:1px solid var(--border); font-family:inherit; font-weight:600; font-size:13px; background:#fff;">
+          <option value="EQUITY" selected>Equity (US/CA)</option>
+          <option value="CRYPTO">Crypto (Binance)</option>
+        </select>
         <input id="symbols" type="text" value="AAPL,MSFT,NVDA"
-               placeholder="AAPL,MSFT,VFV.TO"
+               placeholder="AAPL,MSFT,VFV.TO or BTC,ETH,SOL"
                style="flex:1; min-width:240px; padding:12px 14px; border-radius:12px; border:1px solid var(--border); font-family:'IBM Plex Mono',monospace; font-size:13px;">
         <button id="quote-btn" class="button">Get quotes</button>
       </div>
@@ -218,26 +222,28 @@
     let accessKey = window.marketLensDemo.getStoredApiKey();
     const providerKey = () => sessionStorage.getItem('marketlens.providerKey') || '';
 
-    const api = (path, opts = {}) => fetch(path, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessKey ? { 'X-API-Key': accessKey } : {}),
-        ...(providerKey() ? { 'X-Provider-Key': providerKey() } : {})
-      },
-      ...opts
-    });
+    const api = (path, opts = {}) => {
+      const currentKey = accessKey || window.marketLensDemo.getStoredApiKey();
+      return fetch(path, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentKey ? { 'X-API-Key': currentKey } : {}),
+          ...(providerKey() ? { 'X-Provider-Key': providerKey() } : {})
+        },
+        ...opts
+      });
+    };
 
     const setStatus = (msg, isError = false) => {
       statusEl.textContent = msg || '';
       statusEl.className = 'status' + (isError ? ' error' : '');
     };
 
-    function promptForKey() {
-      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
-      if (next === null) return false;
-      accessKey = window.marketLensDemo.saveApiKey(next);
-      return true;
-    }
+    window.marketLensDemo.attachKeyButton(accessKeyBtn, (newKey) => {
+      accessKey = newKey;
+      loadQuotes();
+      loadTracked();
+    });
 
     const badge = (status) => {
       const colour = status === 'FRESH' ? 'var(--accent)' : status === 'STALE' ? '#d97706' : 'var(--danger)';
@@ -279,14 +285,16 @@
     }
 
     async function loadQuotes() {
-      const symbols = document.getElementById('symbols').value.trim();
+      const symbolsInput = document.getElementById('symbols');
+      const symbols = symbolsInput.value.trim();
+      const assetClass = document.getElementById('asset-class').value;
       if (!symbols) { setStatus('Enter at least one symbol.', true); return; }
       setStatus('Loading…');
       try {
-        let res = await api('/api/v1/quotes?symbols=' + encodeURIComponent(symbols));
+        const res = await api('/api/v1/quotes?symbols=' + encodeURIComponent(symbols) + '&assetClass=' + encodeURIComponent(assetClass));
         if (res.status === 401 || res.status === 403) {
-          if (!promptForKey()) { setStatus('An API key is required.', true); return; }
-          res = await api('/api/v1/quotes?symbols=' + encodeURIComponent(symbols));
+          setStatus('Authentication failed (HTTP ' + res.status + '). Click "Set API Key" above to configure your MarketLens key.', true);
+          return;
         }
         if (!res.ok) { setStatus('Request failed: HTTP ' + res.status, true); return; }
         renderQuotes(await res.json());
@@ -318,6 +326,20 @@
         : 'No provider key set — quotes use this service’s own credentials or a keyless source.';
     }
 
+    document.getElementById('asset-class').addEventListener('change', (e) => {
+      const symbolsInput = document.getElementById('symbols');
+      if (e.target.value === 'CRYPTO') {
+        if (symbolsInput.value === 'AAPL,MSFT,NVDA' || !symbolsInput.value.trim()) {
+          symbolsInput.value = 'BTC,ETH,SOL';
+        }
+      } else {
+        if (symbolsInput.value === 'BTC,ETH,SOL' || !symbolsInput.value.trim()) {
+          symbolsInput.value = 'AAPL,MSFT,NVDA';
+        }
+      }
+      loadQuotes();
+    });
+
     document.getElementById('quote-btn').addEventListener('click', loadQuotes);
     document.getElementById('tracked-btn').addEventListener('click', loadTracked);
     document.getElementById('save-key-btn').addEventListener('click', () => {
@@ -330,10 +352,9 @@
       sessionStorage.removeItem('marketlens.providerKey');
       refreshKeyStatus();
     });
-    accessKeyBtn.addEventListener('click', () => { if (promptForKey()) loadQuotes(); });
 
     (async () => {
-      demoConfig = await window.marketLensDemo.loadDemoConfig();
+      demoConfig = await window.marketLensDemo.load();
       accessKey = window.marketLensDemo.ensureDemoKey(demoConfig, accessKey);
       refreshKeyStatus();
       loadQuotes();

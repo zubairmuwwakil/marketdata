@@ -97,40 +97,38 @@
     let accessKey = window.marketLensDemo.getStoredApiKey();
     marketlensKeyInput.value = accessKey;
 
-    const api = (path, opts = {}) => fetch(path, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessKey ? { 'X-API-Key': accessKey } : {})
-      },
-      ...opts
-    });
+    const api = (path, opts = {}) => {
+      const currentKey = accessKey || window.marketLensDemo.getStoredApiKey();
+      return fetch(path, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentKey ? { 'X-API-Key': currentKey } : {})
+        },
+        ...opts
+      });
+    };
 
     const setStatus = (msg, isError=false) => {
       statusEl.textContent = msg || '';
       statusEl.className = 'status' + (isError ? ' error' : '');
     };
 
-    const promptKey = () => {
-      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
-      if (next === null) return false;
-      accessKey = window.marketLensDemo.saveApiKey(next);
+    window.marketLensDemo.attachKeyButton(accessKeyBtn, (newKey) => {
+      accessKey = newKey;
       marketlensKeyInput.value = accessKey;
-      return true;
-    };
-
-    accessKeyBtn.addEventListener('click', promptKey);
+      loadQuota();
+      loadKeys();
+    });
 
     saveMarketlens.addEventListener('click', () => {
       accessKey = window.marketLensDemo.saveApiKey(marketlensKeyInput.value || '');
-      if (accessKey) {
-        setStatus('MarketLens API key saved.');
-      } else {
-        setStatus('MarketLens API key cleared.');
-      }
+      marketlensKeyInput.value = accessKey;
+      setStatus('MarketLens API key saved.');
+      loadQuota();
+      loadKeys();
     });
 
     saveProvider.addEventListener('click', async () => {
-      if (!accessKey && !promptKey()) return;
       const key = (providerKeyInput.value || '').trim();
       if (!key) return setStatus('Enter provider key.', true);
       setStatus('Saving provider key...');
@@ -148,7 +146,6 @@
     });
 
     async function loadQuota() {
-      if (!accessKey && !promptKey()) return;
       quotaEl.textContent = 'Loading quota...';
       try {
         const res = await api('/api/v1/admin/quota');
@@ -163,7 +160,6 @@
     refreshQuota.addEventListener('click', loadQuota);
 
     async function loadKeys() {
-      if (!accessKey && !promptKey()) return;
       adminStatus.textContent = 'Loading keys...';
       try {
         const res = await api('/api/v1/admin/keys');
@@ -198,7 +194,6 @@
     }
 
     genKeyBtn.addEventListener('click', async () => {
-      if (!accessKey && !promptKey()) return;
       adminStatus.textContent = 'Generating key...';
       try {
         const res = await api('/api/v1/admin/keys', {
@@ -222,7 +217,6 @@
       const rotateId = e.target.getAttribute('data-rotate');
       const deleteId = e.target.getAttribute('data-delete');
       if (!rotateId && !deleteId) return;
-      if (!accessKey && !promptKey()) return;
       try {
         if (rotateId) {
           const res = await api(`/api/v1/admin/keys/${rotateId}/rotate`, { method: 'POST' });

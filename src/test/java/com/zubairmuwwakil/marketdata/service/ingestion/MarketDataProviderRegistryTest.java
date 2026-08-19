@@ -93,4 +93,16 @@ class MarketDataProviderRegistryTest {
 
         assertThat(registry.quoteProvider(AssetClass.EQUITY).sourceName()).isEqualTo("YAHOO");
     }
+
+    @Test
+    void routesCryptoToConfiguredCryptoProvider() {
+        ProviderProperties props = new ProviderProperties();
+        var registry = new MarketDataProviderRegistry(
+                List.of(new FakeCandles("BINANCE", Set.of(AssetClass.CRYPTO))),
+                List.of(new FakeQuotes("BINANCE", Set.of(AssetClass.CRYPTO))),
+                props);
+
+        assertThat(registry.ingestionProvider(AssetClass.CRYPTO).sourceName()).isEqualTo("BINANCE");
+        assertThat(registry.quoteProvider(AssetClass.CRYPTO).sourceName()).isEqualTo("BINANCE");
+    }
 }

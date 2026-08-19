@@ -2,7 +2,9 @@ package com.zubairmuwwakil.marketdata.service.ingestion;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.zubairmuwwakil.marketdata.client.AlphaVantageClient;
+import com.zubairmuwwakil.marketdata.model.AssetClass;
 import com.zubairmuwwakil.marketdata.model.dto.DailyCandle;
+import com.zubairmuwwakil.marketdata.model.dto.QuotedCandle;
 import com.zubairmuwwakil.marketdata.repository.IngestionQuarantineRepository;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -13,7 +15,7 @@ import java.util.*;
 
 @Service
 @Profile("!demo")
-public class AlphaVantageDailyProvider implements MarketDataProvider {
+public class AlphaVantageDailyProvider implements MarketDataProvider, LatestQuoteProvider {
 
     private final AlphaVantageClient client;
     private final IngestionQuarantineRepository quarantineRepository;
@@ -76,6 +78,28 @@ public class AlphaVantageDailyProvider implements MarketDataProvider {
 
         out.sort(Comparator.comparing(DailyCandle::tradeDate));
         return out;
+    }
+
+    @Override
+    public Optional<QuotedCandle> fetchLatestClose(String symbol) {
+        LocalDate to = LocalDate.now();
+        LocalDate from = to.minusDays(30);
+        List<DailyCandle> candles = fetchDailyCandles(symbol, from, to);
+        if (candles.isEmpty()) {
+            return Optional.empty();
+        }
+        DailyCandle latest = candles.get(candles.size() - 1);
+        return Optional.of(new QuotedCandle(symbol, latest, priceCurrency(symbol), sourceName()));
+    }
+
+    @Override
+    public String priceCurrency(String symbol) {
+        return "USD";
+    }
+
+    @Override
+    public Set<AssetClass> supportedAssetClasses() {
+        return Set.of(AssetClass.EQUITY);
     }
 
     @Override

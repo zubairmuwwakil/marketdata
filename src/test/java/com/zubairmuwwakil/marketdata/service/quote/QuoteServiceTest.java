@@ -8,6 +8,7 @@ import com.zubairmuwwakil.marketdata.model.dto.*;
 import com.zubairmuwwakil.marketdata.repository.LatestCandleRepository;
 import com.zubairmuwwakil.marketdata.repository.PriceCandleUpsertRepository;
 import com.zubairmuwwakil.marketdata.repository.TrackedSymbolRepository;
+import com.zubairmuwwakil.marketdata.security.ProviderCredentials;
 import com.zubairmuwwakil.marketdata.service.calendar.MarketCalendarService;
 import com.zubairmuwwakil.marketdata.service.ingestion.LatestQuoteProvider;
 import com.zubairmuwwakil.marketdata.service.ingestion.MarketDataProviderRegistry;
@@ -219,5 +220,122 @@ class QuoteServiceTest {
             assertThat(q.status()).isEqualTo(QuoteStatus.STALE);
             assertThat(q.close()).isEqualByComparingTo("89644.00");
         });
+    }
+
+    @Test
+    void cryptoQuotesUseUtcSessionAndBinanceProvider() {
+        LatestQuoteProvider cryptoProvider = mock(LatestQuoteProvider.class);
+        when(cryptoProvider.sourceName()).thenReturn("BINANCE");
+        when(registry.quoteProvider(eq(AssetClass.CRYPTO))).thenReturn(cryptoProvider);
+        when(latestCandles.findLatestFor(any())).thenReturn(Map.of());
+
+        QuotedCandle btcCandle = new QuotedCandle("BTC",
+                new DailyCandle(LocalDate.of(2026, 8, 13),
+                        new BigDecimal("61000"), new BigDecimal("63000"),
+                        new BigDecimal("60500"), new BigDecimal("62500"), 10000L),
+                "USDT", "BINANCE");
+        when(cryptoProvider.fetchLatestClose(eq("BTC"))).thenReturn(Optional.of(btcCandle));
+
+        QuoteBatch batch = serviceAt(AFTER_CLOSE).quote(List.of("BTC"), AssetClass.CRYPTO);
+
+        assertThat(batch.expectedSession()).isEqualTo(LocalDate.of(2026, 8, 13));
+        assertThat(batch.quotes()).singleElement().satisfies(q -> {
+            assertThat(q.symbol()).isEqualTo("BTC");
+            assertThat(q.status()).isEqualTo(QuoteStatus.FRESH);
+            assertThat(q.currency()).isEqualTo("USDT");
+            assertThat(q.source()).isEqualTo("BINANCE");
+            assertThat(q.keySource()).isEqualTo(KeySource.NONE);
+            assertThat(q.close()).isEqualByComparingTo("62500");
+        });
+    }
+
+    @Test
+    void userKeyedProviderWinsWhenCallerSuppliesXProviderKey() {
+        LatestQuoteProvider avProvider = mock(LatestQuoteProvider.class);
+        when(avProvider.sourceName()).thenReturn("ALPHAVANTAGE");
+        when(registry.findQuoteProvider(eq("ALPHAVANTAGE"), eq(AssetClass.EQUITY)))
+                .thenReturn(Optional.of(avProvider));
+        when(latestCandles.findLatestFor(any())).thenReturn(Map.of());
+
+        QuotedCandle avCandle = new QuotedCandle("AAPL",
+                new DailyCandle(LocalDate.of(2026, 8, 13),
+                        new BigDecimal("225"), new BigDecimal("230"),
+                        new BigDecimal("224"), new BigDecimal("228"), 50000L),
+                "USD", "ALPHAVANTAGE");
+        when(avProvider.fetchLatestClose(eq("AAPL"))).thenReturn(Optional.of(avCandle));
+
+        QuoteBatch batch = ProviderCredentials.callWith(Map.of("ALPHAVANTAGE", "user-secret-key"), () ->
+                serviceAt(AFTER_CLOSE).quote(List.of("AAPL"), AssetClass.EQUITY));
+
+        assertThat(batch.quotes()).singleElement().satisfies(q -> {
+            assertThat(q.symbol()).isEqualTo("AAPL");
+            assertThat(q.status()).isEqualTo(QuoteStatus.FRESH);
+            assertThat(q.currency()).isEqualTo("USD");
+            assertThat(q.source()).isEqualTo("ALPHAVANTAGE");
+            assertThat(q.keySource()).isEqualTo(KeySource.USER);
+            assertThat(q.close()).isEqualByComparingTo("228");
+        });
+        verify(avProvider).fetchLatestClose("AAPL");
+        verify(provider, never()).fetchLatestClose("AAPL");
+    }
+
+    @Test
+    void userKeyedProviderFallsBackToDefaultWhenUserFetchFails() {
+        LatestQuoteProvider avProvider = mock(LatestQuoteProvider.class);
+        when(avProvider.sourceName()).thenReturn("ALPHAVANTAGE");
+        when(registry.findQuoteProvider(eq("ALPHAVANTAGE"), eq(AssetClass.EQUITY)))
+                .thenReturn(Optional.of(avProvider));
+        when(latestCandles.findLatestFor(any())).thenReturn(Map.of());
+        when(avProvider.fetchLatestClose(eq("AAPL"))).thenThrow(new RuntimeException("Rate limit on user key"));
+
+        QuotedCandle yahooCandle = new QuotedCandle("AAPL",
+                new DailyCandle(LocalDate.of(2026, 8, 13),
+                        new BigDecimal("225"), new BigDecimal("230"),
+                        new BigDecimal("224"), new BigDecimal("228.50"), 50000L),
+                "USD", "YAHOO");
+        when(provider.fetchLatestClose(eq("AAPL"))).thenReturn(Optional.of(yahooCandle));
+
+        QuoteBatch batch = ProviderCredentials.callWith(Map.of("ALPHAVANTAGE", "user-secret-key"), () ->
+                serviceAt(AFTER_CLOSE).quote(List.of("AAPL"), AssetClass.EQUITY));
+
+        assertThat(batch.quotes()).singleElement().satisfies(q -> {
+            assertThat(q.symbol()).isEqualTo("AAPL");
+            assertThat(q.status()).isEqualTo(QuoteStatus.FRESH);
+            assertThat(q.currency()).isEqualTo("USD");
+            assertThat(q.source()).isEqualTo("YAHOO");
+            assertThat(q.keySource()).isEqualTo(KeySource.NONE);
+            assertThat(q.close()).isEqualByComparingTo("228.50");
+        });
+        verify(avProvider).fetchLatestClose("AAPL");
+        verify(provider).fetchLatestClose("AAPL");
+    }
+
+    @Test
+    void questradeUserKeyResolvesQuoteWithUserKeySource() {
+        LatestQuoteProvider qtProvider = mock(LatestQuoteProvider.class);
+        when(qtProvider.sourceName()).thenReturn("QUESTRADE");
+        when(registry.findQuoteProvider(eq("QUESTRADE"), eq(AssetClass.EQUITY)))
+                .thenReturn(Optional.of(qtProvider));
+        when(latestCandles.findLatestFor(any())).thenReturn(Map.of());
+
+        QuotedCandle vfvCandle = new QuotedCandle("VFV.TO",
+                new DailyCandle(LocalDate.of(2026, 8, 13),
+                        new BigDecimal("141.50"), new BigDecimal("143.00"),
+                        new BigDecimal("141.00"), new BigDecimal("142.50"), 100000L),
+                "CAD", "QUESTRADE");
+        when(qtProvider.fetchLatestClose(eq("VFV.TO"))).thenReturn(Optional.of(vfvCandle));
+
+        QuoteBatch batch = ProviderCredentials.callWith(Map.of("QUESTRADE", "oauth-token"), () ->
+                serviceAt(AFTER_CLOSE).quote(List.of("VFV.TO"), AssetClass.EQUITY));
+
+        assertThat(batch.quotes()).singleElement().satisfies(q -> {
+            assertThat(q.symbol()).isEqualTo("VFV.TO");
+            assertThat(q.status()).isEqualTo(QuoteStatus.FRESH);
+            assertThat(q.currency()).isEqualTo("CAD");
+            assertThat(q.source()).isEqualTo("QUESTRADE");
+            assertThat(q.keySource()).isEqualTo(KeySource.USER);
+            assertThat(q.close()).isEqualByComparingTo("142.50");
+        });
+        verify(qtProvider).fetchLatestClose("VFV.TO");
     }
 }

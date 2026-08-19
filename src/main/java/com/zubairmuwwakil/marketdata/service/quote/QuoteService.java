@@ -17,10 +17,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -73,7 +76,9 @@ public class QuoteService {
     }
 
     public QuoteBatch quote(List<String> requestedSymbols, AssetClass assetClass) {
-        int cap = providerProperties.getYahoo().getMaxSymbolsPerRequest();
+        int cap = assetClass == AssetClass.CRYPTO
+                ? providerProperties.getBinance().getMaxSymbolsPerRequest()
+                : providerProperties.getYahoo().getMaxSymbolsPerRequest();
 
         List<String> normalized = requestedSymbols == null ? List.of() : requestedSymbols.stream()
                 .filter(Objects::nonNull)
@@ -89,7 +94,7 @@ public class QuoteService {
                 ? List.copyOf(normalized.subList(cap, normalized.size()))
                 : List.of();
 
-        LocalDate expectedSession = lastClosedSession();
+        LocalDate expectedSession = expectedSessionFor(assetClass);
         if (symbols.isEmpty()) {
             return new QuoteBatch("daily-close", expectedSession, List.of(), truncated);
         }
@@ -114,7 +119,7 @@ public class QuoteService {
 
         List<SymbolQuote> quotes = new ArrayList<>(symbols.size());
         for (String symbol : symbols) {
-            SymbolQuote quote = buildQuote(symbol, expectedSession, cached.get(symbol), fetched.get(symbol));
+            SymbolQuote quote = buildQuote(symbol, expectedSession, cached.get(symbol), fetched.get(symbol), assetClass);
             trackedSymbolRepository.recordResolution(symbol, quote.status().name());
             quotes.add(quote);
         }
@@ -124,53 +129,83 @@ public class QuoteService {
 
     /**
      * Fans out to the provider for symbols the cache cannot answer freshly.
-     *
-     * <p>Fan-out, not batch, because Yahoo's multi-symbol quote endpoint returns
-     * HTTP 401 — there is no batch endpoint to call. Bounded three ways: a
-     * semaphore caps simultaneous outbound calls, a wall-clock deadline caps the
-     * whole thing so one hanging symbol cannot exceed a consumer's own request
-     * budget, and provider quota is spent one call at a time.
-     *
-     * <p>Anything that does not resolve inside the deadline is simply absent from
-     * the result, which degrades to the cached last-known price labelled STALE.
-     * Failing to refresh is never allowed to destroy what we already knew.
      */
     private Map<String, QuotedCandle> refresh(List<String> symbols, AssetClass assetClass) {
-        LatestQuoteProvider provider;
+        LatestQuoteProvider defaultProvider;
         try {
-            provider = providerRegistry.quoteProvider(assetClass);
+            defaultProvider = providerRegistry.quoteProvider(assetClass);
         } catch (IllegalStateException ex) {
             log.warn("[quotes] no quote provider for {}: {}", assetClass, ex.getMessage());
             return Map.of();
         }
 
-        ProviderProperties.Yahoo yahoo = providerProperties.getYahoo();
-        if (!yahoo.isEnabled()) {
+        boolean enabled;
+        int maxConcurrency;
+        int dailyBudget;
+        Duration fanOutDeadline;
+
+        if (assetClass == AssetClass.CRYPTO) {
+            ProviderProperties.Binance binance = providerProperties.getBinance();
+            enabled = binance.isEnabled();
+            maxConcurrency = binance.getMaxConcurrency();
+            dailyBudget = binance.getDailyBudget();
+            fanOutDeadline = binance.getFanOutDeadline();
+        } else {
+            ProviderProperties.Yahoo yahoo = providerProperties.getYahoo();
+            enabled = yahoo.isEnabled();
+            maxConcurrency = yahoo.getMaxConcurrency();
+            dailyBudget = yahoo.getDailyBudget();
+            fanOutDeadline = yahoo.getFanOutDeadline();
+        }
+
+        if (!enabled) {
             return Map.of();
         }
 
         Map<String, QuotedCandle> resolved = new ConcurrentHashMap<>();
-        Semaphore concurrency = new Semaphore(Math.max(1, yahoo.getMaxConcurrency()));
+        Semaphore concurrency = new Semaphore(Math.max(1, maxConcurrency));
         // Worker threads do not inherit the request's ThreadLocal binding, so a
         // caller's own key would silently degrade to the app key without this.
         Map<String, String> credentials = ProviderCredentials.snapshot();
+
+        // Check if caller supplied credentials for a specific provider supporting this asset class
+        List<LatestQuoteProvider> userProviders = credentials.keySet().stream()
+                .map(source -> providerRegistry.findQuoteProvider(source, assetClass))
+                .flatMap(Optional::stream)
+                .toList();
 
         List<Callable<Void>> tasks = symbols.stream()
                 .map(symbol -> (Callable<Void>) () -> {
                     concurrency.acquire();
                     try {
-                        if (!quotaService.tryConsumeOneCall(provider.sourceName(), yahoo.getDailyBudget())) {
-                            log.info("[quotes] budget exhausted for {}; serving cached last-known", provider.sourceName());
-                            return null;
-                        }
                         ProviderCredentials.callWith(credentials, () -> {
-                            provider.fetchLatestClose(symbol).ifPresent(q -> resolved.put(symbol, q));
+                            // 1. Try user-keyed providers first if caller provided a key
+                            for (LatestQuoteProvider userProvider : userProviders) {
+                                try {
+                                    Optional<QuotedCandle> quoted = userProvider.fetchLatestClose(symbol);
+                                    if (quoted.isPresent()) {
+                                        resolved.put(symbol, quoted.get());
+                                        return null;
+                                    }
+                                } catch (RuntimeException ex) {
+                                    log.warn("[quotes] user-keyed {} fetch failed for {}: {}",
+                                            userProvider.sourceName(), symbol, ex.toString());
+                                }
+                            }
+
+                            // 2. Fall back to default quote provider
+                            try {
+                                boolean hasUserKeyForDefault = credentials.containsKey(defaultProvider.sourceName());
+                                if (!hasUserKeyForDefault && !quotaService.tryConsumeOneCall(defaultProvider.sourceName(), dailyBudget)) {
+                                    log.info("[quotes] budget exhausted for {}; serving cached last-known", defaultProvider.sourceName());
+                                    return null;
+                                }
+                                defaultProvider.fetchLatestClose(symbol).ifPresent(q -> resolved.put(symbol, q));
+                            } catch (RuntimeException ex) {
+                                log.warn("[quotes] {} refresh failed for {}: {}", defaultProvider.sourceName(), symbol, ex.toString());
+                            }
                             return null;
                         });
-                    } catch (RuntimeException ex) {
-                        // Degradation, not failure: the caller still gets the cached
-                        // price with its true age attached.
-                        log.warn("[quotes] {} refresh failed for {}: {}", provider.sourceName(), symbol, ex.toString());
                     } finally {
                         concurrency.release();
                     }
@@ -179,7 +214,7 @@ public class QuoteService {
                 .toList();
 
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            executor.invokeAll(tasks, yahoo.getFanOutDeadline().toMillis(), TimeUnit.MILLISECONDS);
+            executor.invokeAll(tasks, fanOutDeadline.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
@@ -211,7 +246,8 @@ public class QuoteService {
     private SymbolQuote buildQuote(String symbol,
                                    LocalDate expectedSession,
                                    LatestCandleRepository.LatestCandle cached,
-                                   QuotedCandle fetched) {
+                                   QuotedCandle fetched,
+                                   AssetClass assetClass) {
         if (fetched != null) {
             LocalDate tradeDate = fetched.candle().tradeDate();
             return new SymbolQuote(
@@ -222,7 +258,7 @@ public class QuoteService {
                     tradeDate,
                     fetched.source(),
                     keySourceFor(fetched.source()),
-                    staleTradingDays(tradeDate, expectedSession),
+                    staleDays(tradeDate, expectedSession, assetClass),
                     null);
         }
 
@@ -235,7 +271,7 @@ public class QuoteService {
                     cached.tradeDate(),
                     cached.source(),
                     keySourceFor(cached.source()),
-                    staleTradingDays(cached.tradeDate(), expectedSession),
+                    staleDays(cached.tradeDate(), expectedSession, assetClass),
                     null);
         }
 
@@ -253,10 +289,13 @@ public class QuoteService {
         if (source == null) {
             return KeySource.NONE;
         }
-        if (source.equalsIgnoreCase("YAHOO") || source.equalsIgnoreCase("DEMO")) {
+        if (ProviderCredentials.forProvider(source).isPresent()) {
+            return KeySource.USER;
+        }
+        if (source.equalsIgnoreCase("YAHOO") || source.equalsIgnoreCase("DEMO") || source.equalsIgnoreCase("BINANCE")) {
             return KeySource.NONE;
         }
-        return ProviderCredentials.forProvider(source).isPresent() ? KeySource.USER : KeySource.APP;
+        return KeySource.APP;
     }
 
     private QuoteStatus statusFor(LocalDate tradeDate, LocalDate expectedSession) {
@@ -266,13 +305,21 @@ public class QuoteService {
         return tradeDate.isBefore(expectedSession) ? QuoteStatus.STALE : QuoteStatus.FRESH;
     }
 
-    /** Sessions, not calendar days: a Friday close read on Monday morning is not
-     *  three days stale, it is current. */
-    private int staleTradingDays(LocalDate tradeDate, LocalDate expectedSession) {
+    private int staleDays(LocalDate tradeDate, LocalDate expectedSession, AssetClass assetClass) {
         if (tradeDate == null || !tradeDate.isBefore(expectedSession)) {
             return 0;
         }
+        if (assetClass == AssetClass.CRYPTO) {
+            return (int) ChronoUnit.DAYS.between(tradeDate, expectedSession);
+        }
         return calendarService.tradingDaysBetween(tradeDate.plusDays(1), expectedSession).size();
+    }
+
+    public LocalDate expectedSessionFor(AssetClass assetClass) {
+        if (assetClass == AssetClass.CRYPTO) {
+            return LocalDate.now(clock.withZone(ZoneOffset.UTC));
+        }
+        return lastClosedSession();
     }
 
     /**

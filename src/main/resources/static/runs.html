@@ -158,13 +158,16 @@
     let demoConfig = null;
 
     let accessKey = window.marketLensDemo.getStoredApiKey();
-    const api = (path, opts = {}) => fetch(path, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessKey ? { 'X-API-Key': accessKey } : {})
-      },
-      ...opts
-    });
+    const api = (path, opts = {}) => {
+      const currentKey = accessKey || window.marketLensDemo.getStoredApiKey();
+      return fetch(path, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentKey ? { 'X-API-Key': currentKey } : {})
+        },
+        ...opts
+      });
+    };
 
     const setStatus = (msg, isError=false) => {
       statusEl.textContent = msg || '';
@@ -176,17 +179,13 @@
       qStatus.className = 'status' + (isError ? ' error' : '');
     };
 
-    const promptKey = () => {
-      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
-      if (next === null) return false;
-      accessKey = window.marketLensDemo.saveApiKey(next);
-      return true;
-    };
-
-    accessKeyBtn.addEventListener('click', promptKey);
+    window.marketLensDemo.attachKeyButton(accessKeyBtn, (newKey) => {
+      accessKey = newKey;
+      loadRuns();
+      loadQuarantine();
+    });
 
     async function loadRuns() {
-      if (!accessKey && !promptKey()) return;
       setStatus('Loading runs...');
       try {
         const res = await api('/api/v1/ingestion/runs');
@@ -257,7 +256,6 @@
     }
 
     backfillBtn.addEventListener('click', async () => {
-      if (!accessKey && !promptKey()) return;
       const symbols = prompt('Symbols (comma separated) or leave blank for watchlist', '');
       const from = prompt('From date (YYYY-MM-DD)', '2024-01-01');
       const to = prompt('To date (YYYY-MM-DD)', '2024-12-31');
@@ -284,7 +282,6 @@
     timelineEl.addEventListener('click', async (e) => {
       const id = e.target.getAttribute('data-retry');
       if (!id) return;
-      if (!accessKey && !promptKey()) return;
       setStatus(`Retrying run ${id}...`);
       try {
         const res = await api(`/api/v1/ingestion/runs/${id}/retry`, { method: 'POST' });
@@ -300,7 +297,6 @@
     refreshBtn.addEventListener('click', loadRuns);
 
     async function loadQuarantine() {
-      if (!accessKey && !promptKey()) return;
       setQuarantineStatus('Loading quarantine...');
       try {
         const params = new URLSearchParams();

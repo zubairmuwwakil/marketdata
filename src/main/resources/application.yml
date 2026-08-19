@@ -31,6 +31,8 @@ marketdata:
     # daily closes — the split is sanction and quota, not latency.
     ingestion-equity: ALPHAVANTAGE   # curated watchlist: licensed, 25 calls/day
     quotes-equity: YAHOO             # dynamic per-user symbols: unlicensed, has headroom
+    ingestion-crypto: BINANCE        # crypto watchlist / backfill
+    quotes-crypto: BINANCE           # dynamic crypto quotes: public endpoint, 24/7
     refresh-cron: ${MARKETDATA_QUOTE_REFRESH_CRON:0 30 22 * * *}
     yahoo:
       enabled: ${MARKETDATA_YAHOO_ENABLED:true}
@@ -40,6 +42,21 @@ marketdata:
       daily-budget: ${MARKETDATA_YAHOO_DAILY_BUDGET:2000}
       # Yahoo has no working batch endpoint (v7 answers 401), so a batch of N
       # symbols costs N requests. These three bound the fan-out.
+      max-symbols-per-request: 50
+      max-concurrency: 4
+      fan-out-deadline: 8s
+    binance:
+      enabled: ${MARKETDATA_BINANCE_ENABLED:true}
+      base-url: ${MARKETDATA_BINANCE_BASE_URL:https://api.binance.com}
+      daily-budget: ${MARKETDATA_BINANCE_DAILY_BUDGET:10000}
+      max-symbols-per-request: 50
+      max-concurrency: 4
+      fan-out-deadline: 8s
+    questrade:
+      enabled: ${MARKETDATA_QUESTRADE_ENABLED:true}
+      base-url: ${MARKETDATA_QUESTRADE_BASE_URL:https://api01.iq.questrade.com}
+      access-token: ${QUESTRADE_ACCESS_TOKEN:}
+      daily-budget: ${MARKETDATA_QUESTRADE_DAILY_BUDGET:5000}
       max-symbols-per-request: 50
       max-concurrency: 4
       fan-out-deadline: 8s

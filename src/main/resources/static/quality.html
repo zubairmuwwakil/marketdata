@@ -74,30 +74,28 @@
     let demoConfig = null;
 
     let accessKey = window.marketLensDemo.getStoredApiKey();
-    const api = (path, opts = {}) => fetch(path, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessKey ? { 'X-API-Key': accessKey } : {})
-      },
-      ...opts
-    });
+    const api = (path, opts = {}) => {
+      const currentKey = accessKey || window.marketLensDemo.getStoredApiKey();
+      return fetch(path, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentKey ? { 'X-API-Key': currentKey } : {})
+        },
+        ...opts
+      });
+    };
 
     const setStatus = (msg, isError=false) => {
       statusEl.textContent = msg || '';
       statusEl.className = 'status' + (isError ? ' error' : '');
     };
 
-    const promptKey = () => {
-      const next = prompt('Enter MarketLens API Key', window.marketLensDemo.suggestedApiKey(demoConfig, accessKey));
-      if (next === null) return false;
-      accessKey = window.marketLensDemo.saveApiKey(next);
-      return true;
-    };
-
-    accessKeyBtn.addEventListener('click', promptKey);
+    window.marketLensDemo.attachKeyButton(accessKeyBtn, (newKey) => {
+      accessKey = newKey;
+      runBtn.click();
+    });
 
     runBtn.addEventListener('click', async () => {
-      if (!accessKey && !promptKey()) return;
       if (!symbol.value.trim()) {
         setStatus('Enter a symbol.', true);
         return;
