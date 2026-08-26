@@ -346,7 +346,7 @@ MarketLens is ready for 1-click or UI deployment on Northflank:
 1. **Create a PostgreSQL Add-on**:
    - In your Northflank project, create a new **PostgreSQL** add-on (version 16).
 2. **Create a Combined / Deployment Service**:
-   - **Repository**: Select your `marketdata` repository (branch `render_2` or your target branch).
+   - **Repository**: Select your `marketdata` repository (branch `northflank`).
    - **Build Type**: `Dockerfile` (context `/`, Dockerfile path `Dockerfile`).
    - **Port**: Set container port `8080` (HTTP/HTTPS public exposure).
    - **Health Check**: HTTP GET path `/api/v1/health`.
