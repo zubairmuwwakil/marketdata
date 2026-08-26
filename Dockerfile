@@ -10,4 +10,4 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /app/target/marketdata-0.0.1-SNAPSHOT.jar app.jar
 EXPOSE 8080
-CMD ["java","-Dserver.port=${PORT:-8080}","-jar","/app/app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java -Dserver.port=${PORT:-8080} -jar /app/app.jar"]

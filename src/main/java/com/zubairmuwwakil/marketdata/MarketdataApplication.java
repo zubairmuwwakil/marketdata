@@ -16,22 +16,64 @@ public class MarketdataApplication {
         SpringApplication.run(MarketdataApplication.class, args);
     }
 
-    private static void normalizeDatasourcePropertiesFromEnv() {
+    static void normalizeDatasourcePropertiesFromEnv() {
+        normalizeDatasourceProperties(System::getenv, MarketdataApplication::setIfAbsent);
+    }
+
+    static void normalizeDatasourceProperties(
+            java.util.function.Function<String, String> envLookup,
+            java.util.function.BiConsumer<String, String> propertySetter
+    ) {
+        String rawUrl = firstNonBlank(
+                envLookup.apply("SPRING_DATASOURCE_URL"),
+                envLookup.apply("DATABASE_URL"),
+                envLookup.apply("POSTGRES_URI"),
+                envLookup.apply("POSTGRESQL_URI"),
+                envLookup.apply("NF_POSTGRES_DB_URI"),
+                buildFromIndividualEnvVars(envLookup)
+        );
+
         normalizeConnection(
-                firstNonBlank(System.getenv("SPRING_DATASOURCE_URL"), System.getenv("DATABASE_URL")),
+                rawUrl,
                 "spring.datasource.url",
                 "spring.datasource.username",
-                "spring.datasource.password"
+                "spring.datasource.password",
+                propertySetter
         );
         normalizeConnection(
-                firstNonBlank(System.getenv("SPRING_FLYWAY_URL"), System.getenv("SPRING_DATASOURCE_URL"), System.getenv("DATABASE_URL")),
+                firstNonBlank(envLookup.apply("SPRING_FLYWAY_URL"), rawUrl),
                 "spring.flyway.url",
                 "spring.flyway.user",
-                "spring.flyway.password"
+                "spring.flyway.password",
+                propertySetter
         );
     }
 
-    private static void normalizeConnection(String rawUrl, String urlProperty, String userProperty, String passwordProperty) {
+    private static String buildFromIndividualEnvVars(java.util.function.Function<String, String> envLookup) {
+        String host = envLookup.apply("POSTGRES_HOST");
+        if (host == null || host.isBlank()) {
+            return null;
+        }
+        String port = firstNonBlank(envLookup.apply("POSTGRES_PORT"), "5432");
+        String db = firstNonBlank(envLookup.apply("POSTGRES_DATABASE"), envLookup.apply("POSTGRES_DB"), "marketdata");
+        String user = firstNonBlank(envLookup.apply("POSTGRES_USERNAME"), envLookup.apply("POSTGRES_USER"), "");
+        String pass = firstNonBlank(envLookup.apply("POSTGRES_PASSWORD"), "");
+
+        if (!user.isBlank() && !pass.isBlank()) {
+            return "postgresql://" + user + ":" + pass + "@" + host + ":" + port + "/" + db;
+        } else if (!user.isBlank()) {
+            return "postgresql://" + user + "@" + host + ":" + port + "/" + db;
+        }
+        return "postgresql://" + host + ":" + port + "/" + db;
+    }
+
+    private static void normalizeConnection(
+            String rawUrl,
+            String urlProperty,
+            String userProperty,
+            String passwordProperty,
+            java.util.function.BiConsumer<String, String> propertySetter
+    ) {
         if (rawUrl == null || rawUrl.isBlank()) {
             return;
         }
@@ -39,12 +81,12 @@ public class MarketdataApplication {
         if (rawUrl.startsWith("jdbc:")) {
             ConnectionSettings settings = parseConnectionSettings(rawUrl.substring("jdbc:".length()));
             if (settings == null) {
-                setIfAbsent(urlProperty, rawUrl);
+                propertySetter.accept(urlProperty, rawUrl);
                 return;
             }
-            setIfAbsent(urlProperty, settings.jdbcUrl());
-            setIfAbsent(userProperty, settings.username());
-            setIfAbsent(passwordProperty, settings.password());
+            propertySetter.accept(urlProperty, settings.jdbcUrl());
+            propertySetter.accept(userProperty, settings.username());
+            propertySetter.accept(passwordProperty, settings.password());
             return;
         }
 
@@ -57,43 +99,51 @@ public class MarketdataApplication {
             return;
         }
 
-        setIfAbsent(urlProperty, settings.jdbcUrl());
-        setIfAbsent(userProperty, settings.username());
-        setIfAbsent(passwordProperty, settings.password());
+        propertySetter.accept(urlProperty, settings.jdbcUrl());
+        propertySetter.accept(userProperty, settings.username());
+        propertySetter.accept(passwordProperty, settings.password());
     }
+
+    private static final java.util.regex.Pattern DB_URI_PATTERN = java.util.regex.Pattern.compile(
+            "^(?:jdbc:)?postgres(?:ql)?://(?:([^:@/]+)(?::([^@/]*))?@)?([^:/]+)(?::(\\d+))?(?:/([^?]+))?(?:\\?(.*))?$"
+    );
 
     private static ConnectionSettings parseConnectionSettings(String rawUrl) {
-        try {
-            URI uri = new URI(rawUrl);
-            String host = uri.getHost();
-            String database = uri.getPath() == null ? "" : uri.getPath();
-            if (host == null || database.isBlank()) {
-                return null;
-            }
-
-            StringBuilder jdbcUrl = new StringBuilder("jdbc:postgresql://")
-                    .append(host);
-            if (uri.getPort() != -1) {
-                jdbcUrl.append(':').append(uri.getPort());
-            }
-            jdbcUrl.append(database);
-            if (uri.getRawQuery() != null && !uri.getRawQuery().isBlank()) {
-                jdbcUrl.append('?').append(uri.getRawQuery());
-            }
-
-            String[] credentials = splitUserInfo(uri.getUserInfo());
-            return new ConnectionSettings(jdbcUrl.toString(), credentials[0], credentials[1]);
-        } catch (URISyntaxException ignored) {
+        if (rawUrl == null || rawUrl.isBlank()) {
             return null;
         }
-    }
 
-    private static String[] splitUserInfo(String userInfo) {
-        if (userInfo == null || userInfo.isBlank()) {
-            return new String[] {null, null};
+        var matcher = DB_URI_PATTERN.matcher(rawUrl.trim());
+        if (!matcher.matches()) {
+            return null;
         }
-        String[] parts = userInfo.split(":", 2);
-        return new String[] {parts[0], parts.length > 1 ? parts[1] : null};
+
+        String rawUser = matcher.group(1);
+        String rawPass = matcher.group(2);
+        String host = matcher.group(3);
+        String port = matcher.group(4);
+        String db = matcher.group(5);
+        String query = matcher.group(6);
+
+        if (host == null || host.isBlank()) {
+            return null;
+        }
+
+        StringBuilder jdbcUrl = new StringBuilder("jdbc:postgresql://").append(host);
+        if (port != null && !port.isBlank()) {
+            jdbcUrl.append(':').append(port);
+        }
+        if (db != null && !db.isBlank()) {
+            jdbcUrl.append('/').append(db);
+        }
+        if (query != null && !query.isBlank()) {
+            jdbcUrl.append('?').append(query);
+        }
+
+        String username = rawUser != null ? java.net.URLDecoder.decode(rawUser, java.nio.charset.StandardCharsets.UTF_8) : null;
+        String password = rawPass != null ? java.net.URLDecoder.decode(rawPass, java.nio.charset.StandardCharsets.UTF_8) : null;
+
+        return new ConnectionSettings(jdbcUrl.toString(), username, password);
     }
 
     private static void setIfAbsent(String property, String value) {
