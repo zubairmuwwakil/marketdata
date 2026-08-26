@@ -339,25 +339,12 @@ bind-mount the host-side socket path, which doesn't exist inside the VM.
 
 ## Deployment
 
-### Northflank Deployment
+The repository includes:
 
-MarketLens is ready for 1-click or UI deployment on Northflank:
+- `Dockerfile` for containerized builds.
+- `render.yaml` for Render web service plus managed PostgreSQL deployment.
 
-1. **Create a PostgreSQL Add-on**:
-   - In your Northflank project, create a new **PostgreSQL** add-on (version 16).
-2. **Create a Combined / Deployment Service**:
-   - **Repository**: Select your `marketdata` repository (branch `render_2` or your target branch).
-   - **Build Type**: `Dockerfile` (context `/`, Dockerfile path `Dockerfile`).
-   - **Port**: Set container port `8080` (HTTP/HTTPS public exposure).
-   - **Health Check**: HTTP GET path `/api/v1/health`.
-3. **Link Database & Environment Variables**:
-   - Under **Secrets / Add-ons**, link your PostgreSQL add-on (MarketLens automatically discovers `POSTGRES_URI`, `NF_POSTGRES_DB_URI`, `DATABASE_URL`, or individual `POSTGRES_*` variables).
-   - Add your environment variables:
-     - `MARKETDATA_ADMIN_KEY`: Your secure admin API key
-     - `MARKETDATA_USER_KEY`: Your user API key
-     - `ALPHAVANTAGE_API_KEY`: (Optional) Upstream vendor API key
-
-Flyway migrations (`V1` through `V9`) execute automatically on startup.
+For Render, set `ALPHAVANTAGE_API_KEY`, `MARKETDATA_ADMIN_KEY`, and `MARKETDATA_USER_KEY` as environment variables. The blueprint wires `DATABASE_URL` from the managed database.
 
 ## Documentation
 
