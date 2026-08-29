@@ -10,11 +10,11 @@ import java.sql.SQLException;
  * <p>Exists because upsert syntax differs and the demo profile runs H2 with no
  * Postgres at all — a first-class product mode here, not a test convenience.
  */
-final class DatabaseDialect {
+public final class DatabaseDialect {
 
     private DatabaseDialect() {}
 
-    static boolean isH2(DataSource dataSource) {
+    public static boolean isH2(DataSource dataSource) {
         if (dataSource == null) {
             return false;
         }

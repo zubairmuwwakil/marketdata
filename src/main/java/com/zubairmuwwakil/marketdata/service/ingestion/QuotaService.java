@@ -2,6 +2,7 @@ package com.zubairmuwwakil.marketdata.service.ingestion;
 
 import com.zubairmuwwakil.marketdata.model.entity.ApiQuotaUsage;
 import com.zubairmuwwakil.marketdata.repository.ApiQuotaUsageRepository;
+import com.zubairmuwwakil.marketdata.repository.DatabaseDialect;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -19,10 +20,12 @@ public class QuotaService {
 
     private final ApiQuotaUsageRepository repo;
     private final JdbcTemplate jdbcTemplate;
+    private final boolean h2Database;
 
     public QuotaService(ApiQuotaUsageRepository repo, JdbcTemplate jdbcTemplate) {
         this.repo = repo;
         this.jdbcTemplate = jdbcTemplate;
+        this.h2Database = DatabaseDialect.isH2(jdbcTemplate.getDataSource());
     }
 
     @Transactional
@@ -137,10 +140,20 @@ public class QuotaService {
      * the statement, or wrapped in a savepoint.
      */
     private void ensureTodayRow(String provider, int dailyLimit) {
-        jdbcTemplate.update("""
+        String sql = h2Database ? """
+                MERGE INTO api_quota_usage AS target
+                USING (VALUES (?, ?, 0, ?, ?)) AS source
+                    (provider, usage_date, calls_used, calls_limit, updated_at)
+                   ON target.provider = source.provider AND target.usage_date = source.usage_date
+                WHEN NOT MATCHED THEN INSERT
+                    (provider, usage_date, calls_used, calls_limit, updated_at)
+                    VALUES (source.provider, source.usage_date, source.calls_used,
+                            source.calls_limit, source.updated_at)
+                """ : """
                 INSERT INTO api_quota_usage (provider, usage_date, calls_used, calls_limit, updated_at)
                 VALUES (?, ?, 0, ?, ?)
                 ON CONFLICT (provider, usage_date) DO NOTHING
-                """, provider, LocalDate.now(), dailyLimit, Timestamp.from(Instant.now()));
+                """;
+        jdbcTemplate.update(sql, provider, LocalDate.now(), dailyLimit, Timestamp.from(Instant.now()));
     }
 }

@@ -4,9 +4,6 @@ import com.zubairmuwwakil.marketdata.model.dto.DailyCandle;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -19,7 +16,7 @@ public class PriceCandleUpsertRepository {
 
     public PriceCandleUpsertRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        this.h2Database = detectH2(jdbcTemplate.getDataSource());
+        this.h2Database = DatabaseDialect.isH2(jdbcTemplate.getDataSource());
     }
 
     /**
@@ -78,16 +75,5 @@ public class PriceCandleUpsertRepository {
             }
         }
         return total;
-    }
-
-    private boolean detectH2(DataSource dataSource) {
-        if (dataSource == null) {
-            return false;
-        }
-        try (Connection connection = dataSource.getConnection()) {
-            return connection.getMetaData().getDatabaseProductName().toLowerCase().contains("h2");
-        } catch (SQLException ignored) {
-            return false;
-        }
     }
 }
