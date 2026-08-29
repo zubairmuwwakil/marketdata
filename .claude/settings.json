@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./mvnw --batch-mode verify)",
+      "Bash(./mvnw --batch-mode test:*)",
+      "Bash(./mvnw --batch-mode -Pdemo test)",
+      "Bash(./mvnw --batch-mode compile)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ]
+  }
+}
