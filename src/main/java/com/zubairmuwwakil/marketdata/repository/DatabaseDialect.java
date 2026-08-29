@@ -25,3 +25,8 @@ public final class DatabaseDialect {
         }
     }
 }
+
+// Deliberate compile error for the disposable branch-protection proof.
+class BrokenGatingProof {
+    int value = "not an int";
+}
