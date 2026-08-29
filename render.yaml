@@ -8,11 +8,9 @@ databases:
 services:
   - type: web
     name: marketdata-api
-    env: image
+    runtime: docker
     plan: free
     healthCheckPath: /api/v1/health
-    buildCommand: ./mvnw -DskipTests package
-    startCommand: java -Dserver.port=$PORT -jar target/marketdata-0.0.1-SNAPSHOT.jar
     envVars:
       - key: DATABASE_URL
         fromDatabase:
