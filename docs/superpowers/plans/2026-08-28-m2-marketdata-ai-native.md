@@ -819,6 +819,7 @@ P2: nothing is deleted. The incident histories in `CLAUDE.md` are the most valua
 - Create: `docs/policies/quote-path.md`
 - Create: `docs/policies/api-keys.md`
 - Create: `docs/policies/providers.md`
+- Create: `docs/policies/product-surface.md`
 
 - [ ] **Step 1: Extract the quote path**
 
@@ -927,12 +928,40 @@ refresh token, requires a brokerage account, and its real value is holdings sync
 which is the hub's domain.
 ```
 
-- [ ] **Step 4: Confirm nothing was dropped**
+- [ ] **Step 4: Extract the standalone product surface**
 
-Read the current `CLAUDE.md` beside these three files. Every bullet must land in a
+Create `docs/policies/product-surface.md`:
+
+```markdown
+# Standalone product surface
+
+**Read when:** adding a capability, endpoint, dashboard, or demo-profile wiring.
+
+MarketLens is its own product. In Unity is its first consumer, not its purpose. A
+capability is complete only when it is available through all four public surfaces:
+
+1. An API protected by MarketLens consumer-key authentication.
+2. Accurate OpenAPI documentation.
+3. A dashboard page or affordance that makes the capability usable without a custom
+   client.
+4. Demo-profile support using H2 and no provider key.
+
+Do not ship a production-only capability and call demo support follow-up work. Demo
+mode is a product surface, not a test fixture. Likewise, do not add a private,
+consumer-shaped endpoint for In Unity; expose a general MarketLens capability that
+can serve any client.
+
+Run `./mvnw --batch-mode verify` and `./mvnw --batch-mode -Pdemo test`. For a new
+interactive surface, also start `./mvnw -Pdemo spring-boot:run` and exercise its API
+and dashboard path before considering it complete.
+```
+
+- [ ] **Step 5: Confirm nothing was dropped**
+
+Read the current `CLAUDE.md` beside these four files. Every bullet must land in a
 test (Tasks 3–7), one of these files, or the router's identity lines (Task 9).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add docs/policies/
@@ -997,6 +1026,7 @@ class RouterBudgetTest {
             "docs/policies/quote-path.md",
             "docs/policies/api-keys.md",
             "docs/policies/providers.md",
+            "docs/policies/product-surface.md",
             "docs/policies/exceptions.json"
         }) {
             assertTrue(router.contains("(" + target + ")"), "Router does not link " + target);
@@ -1044,6 +1074,7 @@ needs no PostgreSQL and no provider key, and that is a product promise.
 | [`quote-path.md`](docs/policies/quote-path.md) | touching quotes, staleness, the sweep, or fan-out |
 | [`providers.md`](docs/policies/providers.md) | adding or changing a provider, or touching `price_candle` |
 | [`api-keys.md`](docs/policies/api-keys.md) | touching auth or BYOK — consumer keys and provider keys are different things |
+| [`product-surface.md`](docs/policies/product-surface.md) | adding a capability, endpoint, dashboard, or demo wiring |
 | [`exceptions.json`](docs/policies/exceptions.json) | a guardrail is wrong for your task — add a dated entry and keep moving |
 | [`ECOSYSTEM.md`](ECOSYSTEM.md) | anything spanning repos |
 | [`FLEET.md`](FLEET.md) | recommending which model and effort to run a task at |
