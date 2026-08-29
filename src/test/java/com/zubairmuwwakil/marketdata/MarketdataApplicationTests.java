@@ -5,6 +5,7 @@ import com.zubairmuwwakil.marketdata.repository.PriceCandleRepository;
 import com.zubairmuwwakil.marketdata.repository.PriceCandleUpsertRepository;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -19,6 +20,7 @@ import java.util.List;
 
 @SpringBootTest
 @Testcontainers
+@Tag("postgres")
 class MarketdataApplicationTests {
 
     @Container

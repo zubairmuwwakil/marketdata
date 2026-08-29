@@ -22,3 +22,35 @@ jobs:
 
       - name: Verify
         run: ./mvnw --batch-mode verify
+
+  demo-profile:
+    name: demo profile (no Postgres, no provider key)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Deliberately no services and no secrets. Demo mode is a product surface,
+      # not a test fixture: if it needs a database or a key, its standalone story
+      # has regressed.
+      - name: Tests under the demo profile
+        run: ./mvnw --batch-mode -Pdemo test
+
+      - name: The app boots on H2 with no provider key
+        run: |
+          ./mvnw --batch-mode -Pdemo spring-boot:run > /tmp/demo.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "demo profile is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Demo profile did not become healthy in 120s"
+          tail -60 /tmp/demo.log
+          exit 1
