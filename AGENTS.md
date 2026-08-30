@@ -38,4 +38,4 @@ needs no PostgreSQL and no provider key, and that is a product promise.
 
 Anything not named here and not caught by `./mvnw verify` is yours to decide.
 Prefer acting and letting the build fail over asking.
-Work on a branch and open a PR; it auto-merges when `verify` is green.
+Work directly on `main`; do not open branches or PRs (`MoneyTalks/docs/decisions/LOG.md` 2026-08-30).
