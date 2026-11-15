@@ -1077,7 +1077,7 @@ needs no PostgreSQL and no provider key, and that is a product promise.
 | [`product-surface.md`](docs/policies/product-surface.md) | adding a capability, endpoint, dashboard, or demo wiring |
 | [`exceptions.json`](docs/policies/exceptions.json) | a guardrail is wrong for your task — add a dated entry and keep moving |
 | [`ECOSYSTEM.md`](ECOSYSTEM.md) | anything spanning repos |
-| [`FLEET.md`](FLEET.md) | recommending which model and effort to run a task at |
+| `FLEET.md` | recommending which model and effort to run a task at |
 
 **Say daily or latest close, never real-time** (A6). Asserted, not requested.
 
