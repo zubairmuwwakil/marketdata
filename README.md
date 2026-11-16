@@ -310,6 +310,12 @@ Run the full verification suite:
 
 Docker must be running for tests that use Testcontainers.
 
+Run the Docker-free demo verification separately:
+
+```bash
+./mvnw -Pdemo verify
+```
+
 ### Running against colima
 
 Colima's Docker daemon runs inside a Linux VM, so Testcontainers needs to be

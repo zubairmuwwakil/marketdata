@@ -16,6 +16,6 @@ mode is a product surface, not a test fixture. Likewise, do not add a private,
 consumer-shaped endpoint for In Unity; expose a general MarketLens capability that
 can serve any client.
 
-Run `./mvnw --batch-mode verify` and `./mvnw --batch-mode -Pdemo test`. For a new
+Run `./mvnw --batch-mode verify` and `./mvnw --batch-mode -Pdemo verify`. For a new
 interactive surface, also start `./mvnw -Pdemo spring-boot:run` and exercise its API
 and dashboard path before considering it complete.

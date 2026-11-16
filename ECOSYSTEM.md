@@ -31,8 +31,9 @@ is on loan until it is ported.
 ## Horizon — read before proposing work
 
 - **v1:** ambient checkout pick · wallet capture · email ingestion ·
-  returns/trials/refunds digest · purchase spine · investment tracking via MarketLens (E2)
-- **Later:** net worth · cash-flow forecasting · card ROI reporting · tax/cross-border
+  returns/trials/refunds digest · purchase spine · investment tracking via MarketLens (E2) ·
+  advice receipts (E5, 2026-09-06 — ships inside the value digest, displaces nothing)
+- **Later:** net worth · cash-flow forecasting · tax/cross-border
 - **Never on this path:** bank aggregation (no Plaid/Flinks) · paid tiers ·
   event broker · open card editor · return-saas SaaS-shell work
 

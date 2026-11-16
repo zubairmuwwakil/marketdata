@@ -1,6 +1,7 @@
 package com.zubairmuwwakil.marketdata;
 
 import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -25,6 +26,7 @@ import java.time.Instant;
 import java.util.stream.Stream;
 
 @Testcontainers
+@Tag("postgres")
 class RenderDeploySmokeIT {
 
     @Container

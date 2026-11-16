@@ -225,6 +225,14 @@
 							<excludedGroups>postgres</excludedGroups>
 						</configuration>
 					</plugin>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-failsafe-plugin</artifactId>
+						<configuration>
+							<excludedGroups>postgres</excludedGroups>
+							<summaryFile>${project.build.directory}/failsafe-reports/demo-failsafe-summary.xml</summaryFile>
+						</configuration>
+					</plugin>
 				</plugins>
 			</build>
 		</profile>

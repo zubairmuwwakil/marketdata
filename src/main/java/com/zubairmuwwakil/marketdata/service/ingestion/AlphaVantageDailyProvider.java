@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -19,11 +20,14 @@ public class AlphaVantageDailyProvider implements MarketDataProvider, LatestQuot
 
     private final AlphaVantageClient client;
     private final IngestionQuarantineRepository quarantineRepository;
+    private final Clock clock;
 
     public AlphaVantageDailyProvider(AlphaVantageClient client,
-                                     IngestionQuarantineRepository quarantineRepository) {
+                                     IngestionQuarantineRepository quarantineRepository,
+                                     Clock clock) {
         this.client = client;
         this.quarantineRepository = quarantineRepository;
+        this.clock = clock;
     }
 
     @Override
@@ -82,7 +86,7 @@ public class AlphaVantageDailyProvider implements MarketDataProvider, LatestQuot
 
     @Override
     public Optional<QuotedCandle> fetchLatestClose(String symbol) {
-        LocalDate to = LocalDate.now();
+        LocalDate to = LocalDate.now(clock);
         LocalDate from = to.minusDays(30);
         List<DailyCandle> candles = fetchDailyCandles(symbol, from, to);
         if (candles.isEmpty()) {

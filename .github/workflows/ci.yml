@@ -38,8 +38,8 @@ jobs:
       # Deliberately no services and no secrets. Demo mode is a product surface,
       # not a test fixture: if it needs a database or a key, its standalone story
       # has regressed.
-      - name: Tests under the demo profile
-        run: ./mvnw --batch-mode -Pdemo test
+      - name: Verify the demo profile
+        run: ./mvnw --batch-mode -Pdemo verify
 
       - name: The app boots on H2 with no provider key
         run: |
